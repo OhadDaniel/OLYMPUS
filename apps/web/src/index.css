@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+/* ── MAXWELL design tokens (SPEC §11) — dark only ───────────────── */
+@theme {
+  /* surfaces */
+  --color-s0: #0b0a10;
+  --color-s1: #15141b;
+  --color-s2: #1e1c26;
+  --color-s3: #28252f;
+  --color-hairline: #3a3542;
+
+  /* text */
+  --color-ink: #ede6d6;
+  --color-ink-2: #b9b2a2;
+  --color-ink-3: #726c64;
+
+  /* gold — never #FFD700 */
+  --color-gold: #c6a15b;
+  --color-gold-hover: #e8c87e;
+  --color-gold-pressed: #8c6a3f;
+
+  /* the outer world (imported Google events): neutral stone-grey */
+  --color-outer: #3a3542;
+
+  /* the pantheon — one hue per god, EVERYWHERE (SPEC §4) */
+  --color-zeus: #f2d680;
+  --color-zeus-dim: #4a5568;
+  --color-athena: #7c8ca6;
+  --color-athena-dim: #3e4756;
+  --color-asclepius: #4f8c82;
+  --color-asclepius-dim: #2e4b46;
+  --color-hermes: #34a8a0;
+  --color-hermes-dim: #1f5b57;
+  --color-hestia: #e2823c;
+  --color-hestia-dim: #7a4620;
+  --color-apollo: #e8a33d;
+  --color-apollo-dim: #7e5a23;
+
+  /* type */
+  --font-display: "Cinzel", serif; /* display / god names / numerals */
+  --font-label: "Cormorant SC", serif; /* labels */
+  --font-body: "Spectral", Georgia, serif; /* body 16px+/1.6 */
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-s0);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── aliveness ─────────────────────────────────────────────────── */
+@keyframes tokenIn {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+.tok {
+  animation: tokenIn 0.32s ease-out both;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes drift {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 600px 300px, -400px 200px;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.shimmer-text {
+  background: linear-gradient(90deg, var(--color-ink-3) 25%, var(--color-gold) 50%, var(--color-ink-3) 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.4s linear infinite;
+}
+
+@keyframes stepForward {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* motion is liturgy, not confetti — honor reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

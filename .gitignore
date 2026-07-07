@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+.DS_Store
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
+
+# runtime data & logs — never commit
+data/
+logs/
+*.log
+
+# editor / os
+.vscode/
+.idea/
+*.tsbuildinfo
