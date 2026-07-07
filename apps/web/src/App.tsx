@@ -8,6 +8,7 @@ import { Olympus } from "./screens/Olympus.js";
 import { Veil } from "./screens/Veil.js";
 import { WeeklyCouncil } from "./screens/WeeklyCouncil.js";
 import { ProvingGround } from "./components/ProvingGround.js";
+import { API_URL } from "./lib/api.js";
 import { useLenis } from "./lib/useLenis.js";
 
 type View = "onboarding" | "olympus" | "council" | "loom" | "observatory" | "forge" | "weekly" | "proving";
@@ -26,8 +27,24 @@ const MENU: Array<{ view: View; label: string }> = [
 export function App() {
   useLenis();
   const [view, setView] = useState<View>("olympus");
+  const [booted, setBooted] = useState(false);
   const [veilOpen, setVeilOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // First-ever open (no Scroll) → the First Meeting.
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_URL}/onboarding/status`)
+      .then((r) => r.json())
+      .then((s: { needed?: boolean }) => {
+        if (alive && s.needed) setView("onboarding");
+      })
+      .catch(() => {})
+      .finally(() => alive && setBooted(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -48,6 +65,8 @@ export function App() {
     else setView(v as View);
     setMenuOpen(false);
   };
+
+  if (!booted) return <div className="min-h-screen bg-void" />;
 
   return (
     <div className="min-h-screen bg-bone text-obsidian">
