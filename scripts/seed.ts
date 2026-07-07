@@ -1,12 +1,18 @@
 import { USER_ID } from "../src/config.js";
 import {
+  AgentAction,
   Block,
+  ChatSession,
   Checkin,
   Cycle,
   EmailInsight,
   Episode,
   Goal,
   ImportedEvent,
+  Job,
+  Memory,
+  Message,
+  Proposal,
   Scroll,
   connectDb,
   disconnectDb,
@@ -39,7 +45,14 @@ async function wipe(): Promise<void> {
     ImportedEvent.deleteMany(f),
     EmailInsight.deleteMany(f),
     Episode.deleteMany(f),
+    Memory.deleteMany(f),
+    Proposal.deleteMany(f),
+    ChatSession.deleteMany(f),
+    Message.deleteMany(f),
+    AgentAction.deleteMany(f),
+    Job.deleteMany(f),
   ]);
+  // GoogleToken + TelegramLink + EvalRun are preserved (real connections / history).
 }
 
 const TITLES: Record<GodId, string[]> = {
