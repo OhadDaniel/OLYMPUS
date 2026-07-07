@@ -33,9 +33,9 @@ export interface AuditWriter {
   write(row: AgentActionRow): Promise<void>;
 }
 
-/** Minimal shape of our authored MCP world-server client (Day 2 implements it). */
+/** Minimal shape of our authored MCP world-server client. */
 export interface McpClient {
-  callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  callTool(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>>;
   listTools(): Promise<
     Array<{ name: string; description?: string; inputSchema: Record<string, unknown> }>
   >;

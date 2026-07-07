@@ -6,6 +6,7 @@ import { createEventBus, type AgentEvent } from "../../../../src/events.js";
 import { createHarnessLog, createRunId } from "../../../../src/log.js";
 import { runAgentLoop } from "../../../../src/loop.js";
 import { buildRuntimeSystemPrompt } from "../../../../src/system-prompt.js";
+import { WorldMcpClient } from "../../../../src/tools/mcp-client.js";
 import { createRegistry } from "../../../../src/tools/registry.js";
 import type { AgentRunResult, ToolContext } from "../../../../src/types.js";
 import { VeilBus } from "./veil-bus.js";
@@ -13,10 +14,15 @@ import { VeilBus } from "./veil-bus.js";
 /** The ONE registry + system prompt, and the single entry into runAgentLoop. */
 @Injectable()
 export class HarnessService {
-  private readonly registry = createRegistry();
+  private readonly registry: ReturnType<typeof createRegistry>;
   private cachedSystem?: string;
 
-  constructor(@Inject(VeilBus) private readonly veil: VeilBus) {}
+  constructor(
+    @Inject(VeilBus) private readonly veil: VeilBus,
+    @Inject(WorldMcpClient) private readonly mcp: WorldMcpClient,
+  ) {
+    this.registry = createRegistry(this.mcp);
+  }
 
   private get system(): string {
     return (this.cachedSystem ??= buildRuntimeSystemPrompt());

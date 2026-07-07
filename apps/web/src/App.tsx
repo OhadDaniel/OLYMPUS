@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Council } from "./components/Council.js";
+import { Loom } from "./components/Loom.js";
 import { Orb } from "./components/Orb.js";
 import { Veil } from "./components/Veil.js";
+
+type View = "council" | "loom";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -11,8 +14,21 @@ function greeting(): string {
   return "Good evening, Ohad.";
 }
 
+function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="font-label text-sm uppercase tracking-[0.2em] transition"
+      style={{ color: active ? "var(--color-gold)" : "var(--color-ink-3)" }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function App() {
   const [veilOpen, setVeilOpen] = useState(false);
+  const [view, setView] = useState<View>("council");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -29,28 +45,39 @@ export function App() {
 
   return (
     <div className="flex h-screen flex-col bg-s0 text-ink">
-      <header className="relative shrink-0 border-b border-hairline">
-        <Orb />
-        <div className="absolute inset-x-0 top-6 text-center">
-          <h1 className="font-display text-2xl uppercase tracking-[0.35em] text-gold">Olympus</h1>
+      <nav className="flex shrink-0 items-center justify-between border-b border-hairline px-5 py-3">
+        <span className="font-display text-lg uppercase tracking-[0.3em] text-gold">Maxwell</span>
+        <div className="flex gap-6">
+          <Tab label="Council" active={view === "council"} onClick={() => setView("council")} />
+          <Tab label="The Loom" active={view === "loom"} onClick={() => setView("loom")} />
         </div>
-        <div className="pb-5 text-center">
-          <p className="font-display text-xl tracking-wide text-ink">{greeting()}</p>
-          <p className="mt-1 font-label text-sm tracking-widest text-ink-3">the council is assembled</p>
-        </div>
-      </header>
+        <button
+          onClick={() => setVeilOpen((v) => !v)}
+          className="font-mono text-xs text-ink-3 transition hover:text-gold"
+          title="Behind the Veil"
+        >
+          ⌘. veil
+        </button>
+      </nav>
 
       <main className="min-h-0 flex-1">
-        <Council />
+        {view === "council" ? (
+          <div className="flex h-full flex-col">
+            <header className="relative shrink-0 border-b border-hairline">
+              <Orb />
+              <div className="pb-4 text-center">
+                <p className="font-display text-xl tracking-wide text-ink">{greeting()}</p>
+                <p className="mt-1 font-label text-sm tracking-widest text-ink-3">the council is assembled</p>
+              </div>
+            </header>
+            <div className="min-h-0 flex-1">
+              <Council />
+            </div>
+          </div>
+        ) : (
+          <Loom />
+        )}
       </main>
-
-      <button
-        onClick={() => setVeilOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-40 rounded-full border border-hairline bg-s1 px-3 py-1.5 font-mono text-xs text-ink-3 transition hover:text-gold"
-        title="Behind the Veil"
-      >
-        ⌘. veil
-      </button>
 
       <Veil open={veilOpen} />
     </div>

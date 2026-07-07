@@ -9,16 +9,16 @@ import {
   type ToolDefinition,
 } from "../types.js";
 import { nativeTools } from "./index.js";
+import { buildMcpTools } from "./mcp-client.js";
 
 /**
  * ONE registry (SPEC §6), built once at the composition root. A factory (not a
  * module singleton) so the MCP client can be injected. `mcp` is optional —
- * Day-1 runs native-only; the world-server tools are added when it lands.
+ * without it the registry is native-only; with it, the world-server's
+ * read-only tools mount as source:"mcp".
  */
 export function createRegistry(mcp?: McpClient) {
-  // Day 2: const tools = [...nativeTools, ...(mcp ? buildMcpTools(mcp) : [])];
-  void mcp;
-  const tools: ToolDefinition[] = [...nativeTools];
+  const tools: ToolDefinition[] = [...nativeTools, ...(mcp ? buildMcpTools(mcp) : [])];
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
 
   return {
