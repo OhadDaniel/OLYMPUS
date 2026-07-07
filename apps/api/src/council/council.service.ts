@@ -100,6 +100,7 @@ export class CouncilService {
       intents: toPlacerIntents(mergeIntents(reports)),
       busy: imported.map((e) => ({ start: e.start, end: e.end })),
       constraints: constraintsFromProfile(scroll?.profile),
+      notBefore: new Date(),
     });
     const cycle = await Cycle.create({ userId: USER_ID, startsOn: nextFrom, endsOn: nextTo, councilAt: new Date(), kind: "full" });
     const diff = diffSchedule([], placements, []);

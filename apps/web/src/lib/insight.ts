@@ -26,3 +26,19 @@ export const fetchForge = (): Promise<ForgeStatus> => fetch(`${API_URL}/forge/st
 export const linkTelegram = (): Promise<{ url: string }> =>
   fetch(`${API_URL}/telegram/link`, { method: "POST" }).then((r) => r.json());
 export const googleAuthUrl = (): string => `${API_URL}/auth/google`;
+
+export interface Scorecard {
+  suites: Array<{
+    suite: string;
+    description: string;
+    cases: Array<{ name: string; passed: boolean; detail?: string }>;
+    passed: number;
+    total: number;
+    pct: number;
+  }>;
+  overallPct: number;
+  overallPassed: number;
+  overallTotal: number;
+  at: string;
+}
+export const fetchEvals = (): Promise<Scorecard> => fetch(`${API_URL}/evals`).then((r) => r.json());

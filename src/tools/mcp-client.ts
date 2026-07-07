@@ -4,6 +4,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { z } from "zod";
 import { config } from "../config.js";
 import { ImportedEvent } from "../db/models/index.js";
+import { untrusted } from "../security.js";
 import { defineTool, type McpClient, type ToolDefinition } from "../types.js";
 
 /** Real MCP client that spawns our world-server over stdio. */
@@ -15,15 +16,20 @@ export class WorldMcpClient implements McpClient {
     if (this.client) return;
     if (this.connecting) return this.connecting;
     this.connecting = (async () => {
-      const transport = new StdioClientTransport({
-        command: path.resolve(config.repoRoot, "node_modules/.bin/tsx"),
-        args: [path.resolve(config.repoRoot, "mcp/world-server.ts")],
-        cwd: config.repoRoot,
-        env: process.env as Record<string, string>,
-      });
-      const client = new Client({ name: "maxwell-api", version: "1.0.0" });
-      await client.connect(transport);
-      this.client = client;
+      try {
+        const transport = new StdioClientTransport({
+          command: path.resolve(config.repoRoot, "node_modules/.bin/tsx"),
+          args: [path.resolve(config.repoRoot, "mcp/world-server.ts")],
+          cwd: config.repoRoot,
+          env: process.env as Record<string, string>,
+        });
+        const client = new Client({ name: "maxwell-api", version: "1.0.0" });
+        await client.connect(transport);
+        this.client = client;
+      } catch (e) {
+        this.connecting = undefined; // clear so a transient failure can be retried
+        throw e;
+      }
     })();
     return this.connecting;
   }
@@ -83,7 +89,7 @@ export function buildMcpTools(mcp: McpClient): ToolDefinition[] {
           { upsert: true },
         );
       }
-      return JSON.stringify({ ...r, imported: events.length });
+      return untrusted({ ...r, imported: events.length });
     },
   });
 
@@ -103,7 +109,7 @@ export function buildMcpTools(mcp: McpClient): ToolDefinition[] {
     execute: async (args, ctx) => {
       ctx.emit({ type: "status", text: "Consulting the outer world…" });
       const r = await mcp.callTool("world_freebusy", { from: args.from, to: args.to });
-      return JSON.stringify(r);
+      return untrusted(r);
     },
   });
 
@@ -127,7 +133,7 @@ export function buildMcpTools(mcp: McpClient): ToolDefinition[] {
     execute: async (args, ctx) => {
       ctx.emit({ type: "status", text: "Reading the outer world's letters…" });
       const r = await mcp.callTool("world_email_scan", { sinceDays: args.sinceDays, max: args.max });
-      return JSON.stringify(r);
+      return untrusted(r);
     },
   });
 

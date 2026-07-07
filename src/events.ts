@@ -19,6 +19,7 @@ export type AgentEvent =
     }
   | { type: "tool_gate"; name: string; decision: "gated" }
   | { type: "tool_result"; name: string; ok: boolean }
+  | { type: "self_check"; verdict: "clear" | "concerns"; risks: string[]; passed: number; total: number }
   | { type: "subagent"; godId: GodId; state: "spawned" | "working" | "done" | "silent" }
   | { type: "proposal"; id: string }
   | { type: "usage"; promptTokens: number; completionTokens: number; totalTokens: number }

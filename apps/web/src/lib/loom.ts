@@ -33,6 +33,7 @@ export interface ProposalDetail {
   ok: boolean;
   id: string;
   kind: string;
+  critique: { verdict: "clear" | "concerns"; risks: string[]; checks: Array<{ name: string; passed: boolean }> } | null;
   diff: {
     adds: Array<{ godId: GodId; title: string; start: string; end: string; isAnchor: boolean }>;
     moves: Array<{

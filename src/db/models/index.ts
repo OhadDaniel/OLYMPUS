@@ -20,3 +20,4 @@ export { TelegramLink, type ITelegramLink } from "./telegram-link.js";
 export { Job, type IJob } from "./job.js";
 export { GoogleToken, type IGoogleToken } from "./google-token.js";
 export { EmailInsight, type IEmailInsight } from "./email-insight.js";
+export { EvalRun, type IEvalRun } from "./eval-run.js";

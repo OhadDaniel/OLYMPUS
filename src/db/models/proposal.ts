@@ -28,6 +28,8 @@ export interface IProposal {
   status: ProposalStatus;
   sessionId?: string;
   cycleId?: string;
+  /** Momus's grounded critique (set after drafting, before approval). */
+  critique?: { verdict: "clear" | "concerns"; risks: string[]; checks: Array<{ name: string; passed: boolean }> };
 }
 
 const ProposalSchema = new Schema<IProposal>(
@@ -38,6 +40,7 @@ const ProposalSchema = new Schema<IProposal>(
     status: { type: String, enum: PROPOSAL_STATUSES, default: "pending", index: true },
     sessionId: { type: String, index: true },
     cycleId: { type: String },
+    critique: { type: Schema.Types.Mixed },
   },
   { timestamps: true },
 );

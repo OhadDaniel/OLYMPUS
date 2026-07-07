@@ -92,6 +92,7 @@ export function placeIntents(input: PlacerInput): PlacerResult {
   const noWorkAfterMin = c.noWorkAfter ? parseHM(c.noWorkAfter) : null;
 
   const occupied: BusyInterval[] = input.busy.map((b) => ({ start: b.start, end: b.end }));
+  const notBefore = input.notBefore ? input.notBefore.getTime() : null;
   const days = eachDay(input.windowStart, input.windowEnd);
 
   const sorted = [...input.intents].sort(
@@ -129,6 +130,7 @@ export function placeIntents(input: PlacerInput): PlacerResult {
           if (c.quietHours && overlapsQuiet(t, t + intent.durationMin, c.quietHours)) continue;
           const start = atMinutes(day, t);
           const end = atMinutes(day, t + intent.durationMin);
+          if (notBefore !== null && start.getTime() < notBefore) continue;
           if (overlapsBusy(start.getTime(), end.getTime(), occupied, bufferMs)) continue;
 
           placements.push({

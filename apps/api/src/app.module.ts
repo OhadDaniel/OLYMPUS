@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { ChatModule } from "./chat/chat.module.js";
 import { CouncilModule } from "./council/council.module.js";
 import { CoreModule } from "./core/core.module.js";
+import { EvalsModule } from "./evals/evals.module.js";
 import { InsightModule } from "./insight/insight.module.js";
 import { LoomModule } from "./loom/loom.module.js";
 import { OnboardingModule } from "./onboarding/onboarding.module.js";
@@ -26,6 +27,7 @@ import { VeilModule } from "./veil/veil.module.js";
     RhythmModule,
     OnboardingModule,
     InsightModule,
+    EvalsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

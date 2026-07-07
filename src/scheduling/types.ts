@@ -47,6 +47,8 @@ export interface PlacerInput {
   intents: Intent[];
   busy: BusyInterval[];
   constraints?: PlacerConstraints;
+  /** Never place a block starting before this instant (e.g. "now"). */
+  notBefore?: Date;
 }
 
 export interface Placement {

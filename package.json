@@ -16,6 +16,7 @@
     "mcp:world": "tsx mcp/world-server.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "test": "vitest run",
+    "eval": "tsx scripts/eval.ts",
     "seed:demo": "tsx scripts/seed.ts",
     "seed:wipe": "tsx scripts/seed.ts --wipe"
   },

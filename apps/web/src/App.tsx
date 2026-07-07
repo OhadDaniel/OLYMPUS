@@ -4,9 +4,10 @@ import { Forge } from "./components/Forge.js";
 import { Loom } from "./components/Loom.js";
 import { Observatory } from "./components/Observatory.js";
 import { Orb } from "./components/Orb.js";
+import { ProvingGround } from "./components/ProvingGround.js";
 import { Veil } from "./components/Veil.js";
 
-type View = "council" | "loom" | "observatory" | "forge";
+type View = "council" | "loom" | "observatory" | "forge" | "proving";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -54,6 +55,7 @@ export function App() {
           <Tab label="The Loom" active={view === "loom"} onClick={() => setView("loom")} />
           <Tab label="Observatory" active={view === "observatory"} onClick={() => setView("observatory")} />
           <Tab label="Forge" active={view === "forge"} onClick={() => setView("forge")} />
+          <Tab label="Proving Ground" active={view === "proving"} onClick={() => setView("proving")} />
         </div>
         <button
           onClick={() => setVeilOpen((v) => !v)}
@@ -82,8 +84,10 @@ export function App() {
           <Loom />
         ) : view === "observatory" ? (
           <Observatory />
-        ) : (
+        ) : view === "forge" ? (
           <Forge />
+        ) : (
+          <ProvingGround />
         )}
       </main>
 

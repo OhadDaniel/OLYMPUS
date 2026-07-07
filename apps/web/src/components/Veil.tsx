@@ -56,6 +56,19 @@ function FrameRow({ frame }: { frame: VeilFrame }) {
           <Badge text={e.ok ? "ok" : "blocked"} color={e.ok ? "#4F8C82" : "#c96b6b"} />
         </div>
       );
+    case "self_check":
+      return (
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            {run}
+            <Badge text={`momus: ${e.verdict}`} color={e.verdict === "clear" ? "#4F8C82" : "#C6A15B"} />
+            <span className="text-ink-3">{e.passed}/{e.total} checks</span>
+          </div>
+          {e.risks.map((r, i) => (
+            <span key={i} className="pl-6 text-[10px] text-ink-3">· {r}</span>
+          ))}
+        </div>
+      );
     case "skill":
       return (
         <div className="flex items-center gap-1.5">

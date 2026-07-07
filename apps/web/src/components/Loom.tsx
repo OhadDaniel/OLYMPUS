@@ -210,10 +210,23 @@ export function Loom() {
       {/* approve / reject bar */}
       {proposal && (
         <div className="flex items-center justify-between border-t border-gold/30 bg-s1 px-4 py-3">
-          <span className="font-label text-sm text-ink-2">
-            A proposal awaits — <span className="text-gold">{proposal.diff.adds.length} add</span>,{" "}
-            {proposal.diff.moves.length} move, {proposal.diff.deletes.length} remove
-          </span>
+          <div className="flex flex-col gap-1">
+            <span className="font-label text-sm text-ink-2">
+              A proposal awaits — <span className="text-gold">{proposal.diff.adds.length} add</span>,{" "}
+              {proposal.diff.moves.length} move, {proposal.diff.deletes.length} remove
+            </span>
+            {proposal.critique && (
+              <span
+                className="text-xs"
+                style={{ color: proposal.critique.verdict === "clear" ? "#6cc0b3" : "#E8C87E" }}
+                title={proposal.critique.risks.join(" · ")}
+              >
+                {proposal.critique.verdict === "clear"
+                  ? `◆ Momus checked it — clear (${proposal.critique.checks.length} checks)`
+                  : `◆ Momus flagged ${proposal.critique.risks.length}: ${proposal.critique.risks.join("; ")}`}
+              </span>
+            )}
+          </div>
           <div className="flex gap-2">
             <button onClick={() => void reject()} className="rounded-lg border border-hairline px-4 py-2 font-label uppercase tracking-widest text-ink-2 hover:text-ink">
               Reject

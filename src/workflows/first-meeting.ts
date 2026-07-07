@@ -153,8 +153,6 @@ export async function buildBridgeProposal(userId = USER_ID, now = new Date()) {
     schema: weekIntentsSchema,
   });
 
-  const cycle = await Cycle.create({ userId, startsOn: start, endsOn: end, councilAt, kind: "bridge" });
-
   const busy = imported.map((e) => ({ start: e.start, end: e.end }));
   const { placements, unplaced } = placeIntents({
     windowStart: start,
@@ -162,7 +160,18 @@ export async function buildBridgeProposal(userId = USER_ID, now = new Date()) {
     intents: toPlacerIntents(wi),
     busy,
     constraints: constraintsFromProfile(scroll?.profile),
+    notBefore: now,
   });
+
+  const window = { start: start.toISOString(), end: end.toISOString(), councilAt: councilAt.toISOString() };
+  const unplacedOut = unplaced.map((u) => ({ title: u.title, remaining: u.remaining, reason: u.reason }));
+
+  // Nothing fit → don't persist an orphan Cycle or an empty proposal.
+  if (placements.length === 0) {
+    return { proposalId: null, cycleId: null, window, summary: { adds: 0 }, unplaced: unplacedOut };
+  }
+
+  const cycle = await Cycle.create({ userId, startsOn: start, endsOn: end, councilAt, kind: "bridge" });
   const diff = diffSchedule([], placements, wi.drops ?? []);
   const proposal = await Proposal.create({
     userId,
@@ -175,8 +184,8 @@ export async function buildBridgeProposal(userId = USER_ID, now = new Date()) {
   return {
     proposalId: String(proposal._id),
     cycleId: String(cycle._id),
-    window: { start: start.toISOString(), end: end.toISOString(), councilAt: councilAt.toISOString() },
+    window,
     summary: { adds: diff.adds.length },
-    unplaced: unplaced.map((u) => ({ title: u.title, remaining: u.remaining, reason: u.reason })),
+    unplaced: unplacedOut,
   };
 }

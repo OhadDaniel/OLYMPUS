@@ -44,6 +44,7 @@ export class ProposalsController {
       id: String(p._id),
       kind: p.kind,
       status: p.status,
+      critique: p.critique ?? null,
       diff: {
         adds: (p.diff?.adds ?? []).map((a) => ({
           godId: a.godId,

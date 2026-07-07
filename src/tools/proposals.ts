@@ -5,6 +5,7 @@ import { applyProposal } from "../scheduling/apply.js";
 import { diffSchedule, type ExistingBlock } from "../scheduling/differ.js";
 import { constraintsFromProfile, INTENT_JSON, intentSchema, toPlacerIntents } from "../scheduling/intents.js";
 import { placeIntents } from "../scheduling/placer.js";
+import { critiqueProposal } from "../workflows/momus.js";
 import { defineTool } from "../types.js";
 
 function startOfToday(now: Date): Date {
@@ -72,17 +73,28 @@ export const proposeWeekTool = defineTool({
       intents: toPlacerIntents({ intents: args.intents, drops: args.drops }),
       busy,
       constraints: constraintsFromProfile(scroll?.profile),
+      notBefore: now,
     });
     const diff = diffSchedule(existing, placements, args.drops ?? []);
 
     const proposal = await Proposal.create({ userId: ctx.userId, kind: "week_plan", diff, status: "pending" });
     ctx.emit({ type: "proposal", id: String(proposal._id) });
 
+    const critique = await critiqueProposal(ctx.userId, String(proposal._id));
+    ctx.emit({
+      type: "self_check",
+      verdict: critique.verdict,
+      risks: critique.risks,
+      passed: critique.checks.filter((c) => c.passed).length,
+      total: critique.checks.length,
+    });
+
     return JSON.stringify({
       ok: true,
       proposalId: String(proposal._id),
       window: { from: from.toISOString(), to: to.toISOString() },
       summary: { adds: diff.adds.length, moves: diff.moves.length, deletes: diff.deletes.length },
+      critique,
       unplaced: unplaced.map((u) => ({ title: u.title, remaining: u.remaining, reason: u.reason })),
     });
   },
@@ -146,6 +158,7 @@ export const proposeEditTool = defineTool({
       windowEnd: to,
       intents: toPlacerIntents({ intents: args.addIntents }),
       busy,
+      notBefore: now,
     });
 
     const adds: ProposalAdd[] = placements.map((p) => ({
@@ -169,10 +182,20 @@ export const proposeEditTool = defineTool({
     });
     ctx.emit({ type: "proposal", id: String(proposal._id) });
 
+    const critique = await critiqueProposal(ctx.userId, String(proposal._id));
+    ctx.emit({
+      type: "self_check",
+      verdict: critique.verdict,
+      risks: critique.risks,
+      passed: critique.checks.filter((c) => c.passed).length,
+      total: critique.checks.length,
+    });
+
     return JSON.stringify({
       ok: true,
       proposalId: String(proposal._id),
       summary: { adds: adds.length, moves: moves.length, deletes: args.deletes.length },
+      critique,
       unplaced: unplaced.map((u) => ({ title: u.title, remaining: u.remaining, reason: u.reason })),
     });
   },
