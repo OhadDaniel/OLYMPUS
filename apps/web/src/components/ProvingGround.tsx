@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchEvals, type Scorecard } from "../lib/insight.js";
 
+const GOLD = "#C6A15B";
+const EMBER = "#E2823C";
+const IVORY = "#EDE6D6";
+
 export function ProvingGround() {
   const [card, setCard] = useState<Scorecard | null>(null);
   const [running, setRunning] = useState(false);
@@ -18,64 +22,131 @@ export function ProvingGround() {
     void run();
   }, [run]);
 
+  const open = card ? card.overallPct >= 90 : false;
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 overflow-y-auto p-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-lg uppercase tracking-[0.25em] text-gold">The Proving Ground</h2>
-        <button
-          onClick={() => void run()}
-          disabled={running}
-          className="rounded-lg border border-gold/40 px-4 py-1.5 font-label text-xs uppercase tracking-widest text-gold hover:bg-gold/10 disabled:opacity-40"
-        >
-          {running ? "running…" : "run evals"}
-        </button>
-      </div>
-      <p className="text-sm text-ink-3">
-        Maxwell grades itself every commit: a regression gate over the safety gate, the scheduler's invariants,
-        injection resistance, and whether the council's plans are actually executable.
-      </p>
+    <div className="relative min-h-screen overflow-hidden bg-void font-body text-marbleivory">
+      {/* texture: rotating contours + gold nebula + grain */}
+      <div className="mx-contours mx-contours-ivory" style={{ top: "-260px", right: "-200px", width: 1000, height: 1000, opacity: 0.14 }} />
+      <div
+        className="pointer-events-none absolute"
+        style={{ left: "-10%", top: "20%", width: 700, height: 700, background: "radial-gradient(50% 50% at 50% 50%, rgba(198,161,91,.10), transparent 70%)" }}
+      />
+      <div className="mx-grain" style={{ opacity: 0.06 }} />
 
-      {!card ? (
-        <div className="text-ink-3">Running the suite…</div>
-      ) : (
-        <>
-          <div
-            className="rounded-xl border p-6 text-center"
-            style={{ borderColor: card.overallPct === 100 ? "#4F8C82" : "#C6A15B", background: card.overallPct === 100 ? "rgba(79,140,130,0.08)" : "rgba(198,161,91,0.06)" }}
-          >
-            <div className="font-display text-5xl" style={{ color: card.overallPct === 100 ? "#6cc0b3" : "#C6A15B" }}>
-              {card.overallPct}%
-            </div>
-            <div className="font-label text-xs uppercase tracking-widest text-ink-3">
-              {card.overallPassed}/{card.overallTotal} checks passing · regression gate {card.overallPct >= 90 ? "✓ open" : "✗ blocked"}
-            </div>
+      <div className="relative mx-auto max-w-[1080px] px-12 py-16">
+        {/* header */}
+        <div className="flex items-baseline gap-4" style={{ animation: "mxRise 1s var(--ease) both" }}>
+          <span className="font-label text-[12px] tracking-[0.4em]" style={{ color: GOLD }}>
+            THE PROVING GROUND — № 09
+          </span>
+          <span className="ml-auto font-label text-[11px] tracking-[0.3em] text-mist">MAXWELL GRADES HIMSELF</span>
+        </div>
+
+        <div className="mt-6 flex items-end justify-between" style={{ animation: "mxRise 1.1s var(--ease) 0.1s both" }}>
+          <div className="max-w-[560px]">
+            <h1 className="font-display" style={{ fontWeight: 380, fontSize: 60, lineHeight: 1.02, letterSpacing: "-0.02em", color: IVORY }}>
+              The week, put on trial
+            </h1>
+            <p className="mt-5 font-voice italic" style={{ fontSize: 19, lineHeight: 1.5, color: "rgba(237,230,214,.62)" }}>
+              A regression gate over the safety gate, the scheduler's invariants, injection resistance, and whether the
+              council's plans are truly executable — measured every commit, not asserted.
+            </p>
           </div>
+          {card && (
+            <div className="text-right">
+              <div
+                className="font-display italic"
+                style={{ fontWeight: 340, fontSize: 112, lineHeight: 0.9, color: GOLD, textShadow: "0 0 40px rgba(198,161,91,.4)" }}
+              >
+                {card.overallPct}
+              </div>
+              <div className="font-label text-[11px] tracking-[0.3em]" style={{ color: open ? GOLD : EMBER }}>
+                REGRESSION GATE — {open ? "OPEN" : "BLOCKED"}
+              </div>
+            </div>
+          )}
+        </div>
 
-          <div className="space-y-3">
-            {card.suites.map((s) => (
-              <div key={s.suite} className="rounded-lg border border-hairline bg-s1 p-4">
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="font-label uppercase tracking-widest" style={{ color: s.pct === 100 ? "#6cc0b3" : "#c96b6b" }}>
-                    {s.pct === 100 ? "✓" : "✗"} {s.suite}
+        {/* run action */}
+        <div className="mt-8">
+          <button
+            onClick={() => void run()}
+            disabled={running}
+            className="font-label text-[12px] uppercase tracking-[0.28em] transition"
+            style={{ color: GOLD, border: `1px solid rgba(198,161,91,.45)`, background: "transparent", padding: "12px 26px", borderRadius: 2 }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(198,161,91,.08)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            {running ? "WEIGHING…" : "ENGRAVE AGAIN —"}
+          </button>
+        </div>
+
+        {/* suites — engraved rows */}
+        <div className="mt-12 flex flex-col">
+          {(card?.suites ?? []).map((s, i) => {
+            const passed = s.pct === 100;
+            const hue = passed ? GOLD : EMBER;
+            return (
+              <div
+                key={s.suite}
+                className="py-6"
+                style={{ borderTop: "1px solid rgba(237,230,214,.14)", animation: `mxRise .8s var(--ease) ${0.15 + i * 0.08}s both` }}
+              >
+                <div className="flex items-baseline gap-4">
+                  <span className="font-display italic" style={{ fontSize: 22, color: hue }}>
+                    {passed ? "✦" : "▲"}
                   </span>
-                  <span className="text-xs text-ink-3">{s.passed}/{s.total}</span>
+                  <span className="font-label text-[13px] uppercase tracking-[0.3em]" style={{ color: hue }}>
+                    {s.suite.replace(/-/g, " ")}
+                  </span>
+                  <span className="ml-auto font-mono text-[12px]" style={{ color: "rgba(237,230,214,.6)" }}>
+                    {s.passed}/{s.total}
+                  </span>
                 </div>
-                <p className="mb-2 text-xs text-ink-3">{s.description}</p>
-                <div className="h-1.5 rounded bg-s2">
-                  <div className="h-1.5 rounded" style={{ width: `${s.pct}%`, background: s.pct === 100 ? "#4F8C82" : "#c96b6b" }} />
+                <p className="mt-2 font-voice italic" style={{ fontSize: 16, color: "rgba(237,230,214,.55)" }}>
+                  {s.description}
+                </p>
+                <div className="mt-3 h-[3px] w-full" style={{ background: "rgba(237,230,214,.1)" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${s.pct}%`,
+                      background: hue,
+                      transformOrigin: "left",
+                      animation: `mxGrow 1.1s var(--ease) ${0.3 + i * 0.08}s both`,
+                    }}
+                  />
                 </div>
                 {s.cases.filter((c) => !c.passed).length > 0 && (
-                  <ul className="mt-2 space-y-1 text-xs text-red-300">
-                    {s.cases.filter((c) => !c.passed).map((c, i) => (
-                      <li key={i}>✗ {c.name}{c.detail ? ` — ${c.detail}` : ""}</li>
-                    ))}
-                  </ul>
+                  <div className="mt-3 flex flex-col gap-1">
+                    {s.cases
+                      .filter((c) => !c.passed)
+                      .map((c, j) => (
+                        <span key={j} className="font-mono text-[11px]" style={{ color: EMBER, animation: `mxRowIn .5s var(--ease) ${j * 0.06}s both` }}>
+                          ✗ {c.name}
+                          {c.detail ? ` — ${c.detail}` : ""}
+                        </span>
+                      ))}
+                  </div>
                 )}
               </div>
-            ))}
+            );
+          })}
+        </div>
+
+        {/* footer totals — terminal grammar */}
+        {card && (
+          <div
+            className="mt-8 flex items-center gap-6 pt-6 font-mono text-[12px]"
+            style={{ borderTop: "1px solid rgba(237,230,214,.14)", color: "rgba(237,230,214,.55)" }}
+          >
+            <span>Σ {card.overallPassed}/{card.overallTotal} CHECKS</span>
+            <span style={{ color: open ? GOLD : EMBER }}>· GATE {open ? "OPEN — QUALITY HELD" : "BLOCKED — QUALITY DROPPED"}</span>
+            <span className="ml-auto">{new Date(card.at).toLocaleTimeString()}</span>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
