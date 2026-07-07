@@ -24,15 +24,19 @@ export async function verifyFirstMeeting(userId = USER_ID): Promise<{
   coveredAreas: string[];
   missing: string[];
 }> {
-  const [scroll, areas, goals, google, tg, bridgeCycles, scheduledBlocks] = await Promise.all([
+  const [scroll, areas, goals, google, tg, bridgeCycles] = await Promise.all([
     Scroll.findOne({ userId }).lean(),
     coveredAreas(userId),
     Goal.find({ userId }).lean(),
     GoogleToken.findOne({ userId }).lean(),
     TelegramLink.findOne({ userId, chatId: { $ne: null } }).lean(),
     Cycle.find({ userId, kind: "bridge" }).lean(),
-    Block.countDocuments({ userId, status: "scheduled" }),
   ]);
+  const bridgeCycleIds = bridgeCycles.map((c) => String(c._id));
+  const bridgeBlocks =
+    bridgeCycleIds.length > 0
+      ? await Block.countDocuments({ userId, cycleId: { $in: bridgeCycleIds }, status: { $ne: "cancelled" } })
+      : 0;
 
   const checks: FirstMeetingChecks = {
     identity: Boolean(scroll?.profile?.identity?.name),
@@ -42,7 +46,7 @@ export async function verifyFirstMeeting(userId = USER_ID): Promise<{
     google: Boolean(google?.refreshToken),
     telegram: Boolean(tg?.chatId),
     councilSlot: bridgeCycles.some((c) => Boolean(c.councilAt)),
-    bridge: scheduledBlocks > 0,
+    bridge: bridgeBlocks > 0,
   };
 
   const missing = (Object.keys(checks) as (keyof FirstMeetingChecks)[]).filter((k) => !checks[k]);

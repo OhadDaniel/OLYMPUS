@@ -17,3 +17,8 @@ export async function claimJob(userId: string, key: string, payload?: unknown): 
 export async function markJob(key: string, status: "done" | "failed"): Promise<void> {
   await Job.updateOne({ key }, { $set: { status } });
 }
+
+/** Release a claimed key so it can be retried (e.g. a send that no-op'd). */
+export async function releaseJob(key: string): Promise<void> {
+  await Job.deleteOne({ key });
+}

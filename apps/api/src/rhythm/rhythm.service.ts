@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { InlineKeyboard } from "grammy";
 import { USER_ID } from "../../../../src/config.js";
-import { claimJob } from "../../../../src/jobs.js";
+import { claimJob, releaseJob } from "../../../../src/jobs.js";
 import { readWeek } from "../../../../src/scheduling/week.js";
 import { TelegramService } from "../telegram/telegram.service.js";
 
@@ -26,12 +26,18 @@ export class RhythmService {
 
   @Cron("5 7 * * *")
   async morningBriefCron(): Promise<void> {
-    if (await claimJob(USER_ID, todayKey("brief"))) await this.sendMorningBrief();
+    const key = todayKey("brief");
+    if (!(await claimJob(USER_ID, key))) return; // already handled today
+    const { sent } = await this.sendMorningBrief();
+    if (!sent) await releaseJob(key); // not linked yet → let a later run retry, don't mark done
   }
 
   @Cron("30 21 * * *")
   async eveningCheckinCron(): Promise<void> {
-    if (await claimJob(USER_ID, todayKey("checkin"))) await this.sendEveningCheckin();
+    const key = todayKey("checkin");
+    if (!(await claimJob(USER_ID, key))) return;
+    const { sent } = await this.sendEveningCheckin();
+    if (!sent) await releaseJob(key);
   }
 
   /** ≤600 chars, one focus, warm, never shame (notifier rules). */

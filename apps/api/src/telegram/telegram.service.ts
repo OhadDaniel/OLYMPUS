@@ -61,7 +61,14 @@ export class TelegramService implements OnModuleInit {
       await Checkin.create({ userId: USER_ID, blockId, response: answer, via: "telegram" });
       await Block.updateOne({ _id: blockId, userId: USER_ID }, { $set: { status: answer } });
       await ctx.answerCallbackQuery({ text: `Marked ${answer} ✓` });
-      await ctx.editMessageReplyMarkup().catch(() => {});
+      // Remove only the answered block's row; keep the other blocks tappable.
+      const rows = ctx.callbackQuery.message?.reply_markup?.inline_keyboard ?? [];
+      const remaining = rows.filter(
+        (row) => !row.some((b) => "callback_data" in b && b.callback_data?.startsWith(`chk:${blockId}:`)),
+      );
+      await ctx
+        .editMessageReplyMarkup(remaining.length > 0 ? { reply_markup: { inline_keyboard: remaining } } : undefined)
+        .catch(() => {});
     });
 
     // Chat relay
