@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Council } from "./components/Council.js";
+import { Forge } from "./components/Forge.js";
 import { Loom } from "./components/Loom.js";
+import { Observatory } from "./components/Observatory.js";
 import { Orb } from "./components/Orb.js";
 import { Veil } from "./components/Veil.js";
 
-type View = "council" | "loom";
+type View = "council" | "loom" | "observatory" | "forge";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -50,6 +52,8 @@ export function App() {
         <div className="flex gap-6">
           <Tab label="Council" active={view === "council"} onClick={() => setView("council")} />
           <Tab label="The Loom" active={view === "loom"} onClick={() => setView("loom")} />
+          <Tab label="Observatory" active={view === "observatory"} onClick={() => setView("observatory")} />
+          <Tab label="Forge" active={view === "forge"} onClick={() => setView("forge")} />
         </div>
         <button
           onClick={() => setVeilOpen((v) => !v)}
@@ -74,8 +78,12 @@ export function App() {
               <Council />
             </div>
           </div>
-        ) : (
+        ) : view === "loom" ? (
           <Loom />
+        ) : view === "observatory" ? (
+          <Observatory />
+        ) : (
+          <Forge />
         )}
       </main>
 

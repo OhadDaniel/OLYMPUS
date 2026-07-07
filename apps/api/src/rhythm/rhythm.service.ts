@@ -4,6 +4,7 @@ import { InlineKeyboard } from "grammy";
 import { USER_ID } from "../../../../src/config.js";
 import { claimJob, releaseJob } from "../../../../src/jobs.js";
 import { readWeek } from "../../../../src/scheduling/week.js";
+import { runConsolidation } from "../../../../src/workflows/consolidation.js";
 import { TelegramService } from "../telegram/telegram.service.js";
 
 function startOfToday(): Date {
@@ -38,6 +39,15 @@ export class RhythmService {
     if (!(await claimJob(USER_ID, key))) return;
     const { sent } = await this.sendEveningCheckin();
     if (!sent) await releaseJob(key);
+  }
+
+  @Cron("0 2 * * *")
+  async consolidationCron(): Promise<void> {
+    if (await claimJob(USER_ID, todayKey("consolidate"))) await runConsolidation(USER_ID);
+  }
+
+  consolidate(): Promise<{ learned: number }> {
+    return runConsolidation(USER_ID);
   }
 
   /** ≤600 chars, one focus, warm, never shame (notifier rules). */

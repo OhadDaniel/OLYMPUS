@@ -15,4 +15,9 @@ export class RhythmController {
   checkin(): Promise<{ sent: boolean; blocks: number }> {
     return this.rhythm.sendEveningCheckin();
   }
+
+  @Post("consolidate")
+  consolidate(): Promise<{ learned: number }> {
+    return this.rhythm.consolidate();
+  }
 }
