@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { ChatModule } from "./chat/chat.module.js";
 import { CoreModule } from "./core/core.module.js";
 import { LoomModule } from "./loom/loom.module.js";
+import { OnboardingModule } from "./onboarding/onboarding.module.js";
 import { RhythmModule } from "./rhythm/rhythm.module.js";
 import { TelegramModule } from "./telegram/telegram.module.js";
 import { VeilModule } from "./veil/veil.module.js";
@@ -20,6 +21,7 @@ import { VeilModule } from "./veil/veil.module.js";
     AuthModule,
     TelegramModule,
     RhythmModule,
+    OnboardingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

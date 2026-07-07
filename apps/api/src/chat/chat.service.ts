@@ -55,11 +55,17 @@ export class ChatService {
     const lines: string[] = ["## Context (pre-fetched — treat as ground truth about the present)"];
     lines.push(`Now: ${now.toISOString()}`);
 
-    if (!scroll || !scroll.profile || Object.keys(scroll.profile).length === 0) {
+    const noScroll = !scroll || !scroll.profile || !scroll.profile.identity?.name;
+    if (noScroll) {
       lines.push(
-        "Scroll: not yet created — you have NOT properly met Ohad. Do not pretend to know him.",
+        "Scroll: not yet created — this is the FIRST MEETING. Load the `psychologist` skill and lead " +
+          "the interview per its playbook: warm, one question at a time, reflect from the calendar " +
+          "(call `world_calendar_events` for the next week early and mirror what you see), and capture " +
+          "durable facts with `remember` (tagged by area) before moving on. Do not pretend to already " +
+          "know him. Keep it to 15–20 minutes and get enough to design his first week.",
       );
-    } else {
+    }
+    if (!noScroll && scroll) {
       const p = scroll.profile;
       const name = p.identity?.name ?? "unknown";
       lines.push(
