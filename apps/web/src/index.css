@@ -1,133 +1,152 @@
 @import "tailwindcss";
 
-/* ── MAXWELL design tokens (SPEC §11) — dark only ───────────────── */
+/* ═══════════════ MAXWELL — visual language of record ═══════════════ */
 @theme {
-  /* surfaces */
-  --color-s0: #0b0a10;
-  --color-s1: #15141b;
-  --color-s2: #1e1c26;
-  --color-s3: #28252f;
-  --color-hairline: #3a3542;
-
-  /* text */
-  --color-ink: #ede6d6;
-  --color-ink-2: #b9b2a2;
-  --color-ink-3: #726c64;
-
-  /* gold — never #FFD700 */
+  /* surfaces — light field */
+  --color-bone: #f5f2ea;
+  --color-ivory: #fbf9f4;
+  --color-marble: #ece7db;
+  --color-stone: #d8d0c0;
+  /* ink */
+  --color-obsidian: #14131a;
+  --color-slate: #4a4740;
+  --color-mist: #8a857a;
+  /* sacred dark */
+  --color-void: #0b0a10;
+  --color-void2: #15141b;
+  --color-marbleivory: #ede6d6;
+  /* accent — the event */
   --color-gold: #c6a15b;
-  --color-gold-hover: #e8c87e;
-  --color-gold-pressed: #8c6a3f;
-
-  /* the outer world (imported Google events): neutral stone-grey */
-  --color-outer: #3a3542;
-
-  /* the pantheon — one hue per god, EVERYWHERE (SPEC §4) */
-  --color-zeus: #f2d680;
-  --color-zeus-dim: #4a5568;
+  --color-goldhover: #e8c87e;
+  /* the six gods */
+  --color-zeus: #c6a15b;
   --color-athena: #7c8ca6;
-  --color-athena-dim: #3e4756;
   --color-asclepius: #4f8c82;
-  --color-asclepius-dim: #2e4b46;
   --color-hermes: #34a8a0;
-  --color-hermes-dim: #1f5b57;
   --color-hestia: #e2823c;
-  --color-hestia-dim: #7a4620;
   --color-apollo: #e8a33d;
-  --color-apollo-dim: #7e5a23;
 
-  /* type */
-  --font-display: "Cinzel", serif; /* display / god names / numerals */
-  --font-label: "Cormorant SC", serif; /* labels */
-  --font-body: "Spectral", Georgia, serif; /* body 16px+/1.6 */
+  /* type — three voices + numerals + terminal */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-voice: "Cormorant Garamond", Georgia, serif;
+  --font-label: "Cormorant SC", Georgia, serif;
+  --font-body: "Schibsted Grotesk", "Helvetica Neue", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+/* rgb triples for inline hue tints (rgb(var(--zeus-rgb) / .12)) + easing */
+:root {
+  --zeus-rgb: 198 161 91;
+  --athena-rgb: 124 140 166;
+  --asclepius-rgb: 79 140 130;
+  --hermes-rgb: 52 168 160;
+  --hestia-rgb: 226 130 60;
+  --apollo-rgb: 232 163 61;
+  --gold-rgb: 198 161 91;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+html {
+  scroll-behavior: smooth;
+}
 body {
   margin: 0;
-  background: var(--color-s0);
-  color: var(--color-ink);
+  background: var(--color-bone);
+  color: var(--color-obsidian);
   font-family: var(--font-body);
   font-size: 16px;
-  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-
-/* ── aliveness ─────────────────────────────────────────────────── */
-@keyframes tokenIn {
-  from {
-    opacity: 0;
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    filter: blur(0);
-  }
+::selection {
+  background: rgb(var(--gold-rgb) / 0.35);
 }
-.tok {
-  animation: tokenIn 0.32s ease-out both;
+a {
+  color: inherit;
+  text-decoration-color: var(--color-gold);
 }
 
-@keyframes breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scale(1.06);
-    opacity: 1;
-  }
+/* ═══════════════ the liturgy — keyframe catalog ═══════════════ */
+@keyframes mxSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes mxFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes mxDrift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes mxBreathe { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.07); } }
+@keyframes mxOrb {
+  0%, 100% { box-shadow: 0 0 26px 6px rgb(var(--gold-rgb) / 0.22); transform: scale(1); }
+  50% { box-shadow: 0 0 60px 18px rgba(232, 200, 126, 0.42); transform: scale(1.09); }
+}
+@keyframes mxOrbBig {
+  0%, 100% { box-shadow: 0 0 40px 10px rgb(var(--gold-rgb) / 0.28); transform: scale(1) translateY(0); }
+  50% { box-shadow: 0 0 90px 26px rgba(232, 200, 126, 0.5); transform: scale(1.1) translateY(-6px); }
+}
+@keyframes mxRise { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mxRiseUp { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mxRecede { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-24px); } }
+@keyframes mxToken { from { opacity: 0; transform: translateY(6px); filter: blur(2px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+@keyframes mxCycle {
+  0% { opacity: 0; transform: translateY(28px); }
+  12%, 78% { opacity: 1; transform: translateY(0); }
+  92%, 100% { opacity: 0; transform: translateY(28px); }
+}
+@keyframes mxAwakenImg {
+  0%, 14% { filter: grayscale(1) brightness(0.7); opacity: 0.55; }
+  38%, 74% { filter: grayscale(0) brightness(1.05) drop-shadow(0 0 30px rgba(232, 163, 61, 0.45)); opacity: 1; }
+  92%, 100% { filter: grayscale(1) brightness(0.7); opacity: 0.55; }
+}
+@keyframes mxAwakenName {
+  0%, 14% { color: #8a857a; letter-spacing: 0.3em; }
+  38%, 74% { color: #e8a33d; letter-spacing: 0.44em; }
+  92%, 100% { color: #8a857a; letter-spacing: 0.3em; }
+}
+@keyframes mxKenBurns { from { transform: scale(1.06); } to { transform: scale(1.15); } }
+@keyframes mxWind { from { transform: translateX(-40px); } to { transform: translateX(40px); } }
+@keyframes mxWind2 { from { transform: translateX(30px); } to { transform: translateX(-30px); } }
+@keyframes mxShoot {
+  0% { transform: translate(0, 0) rotate(-18deg); opacity: 0; }
+  6% { opacity: 1; }
+  16% { opacity: 0.9; }
+  22%, 100% { transform: translate(-520px, 180px) rotate(-18deg); opacity: 0; }
+}
+@keyframes mxDraw { from { stroke-dashoffset: var(--dash, 1000); } to { stroke-dashoffset: 0; } }
+@keyframes mxGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes mxBlockIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes mxPulseGold {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--gold-rgb) / 0.35); }
+  50% { box-shadow: 0 0 16px 3px rgb(var(--gold-rgb) / 0.45); }
+}
+@keyframes mxAsh { from { opacity: 1; filter: grayscale(0); } to { opacity: 0.28; filter: grayscale(1); } }
+@keyframes mxRowIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes mxTwinkle { 0%, 100% { opacity: 0.85; } 50% { opacity: 0.4; } }
+@keyframes mxShimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes mxVeil { from { opacity: 1; } to { opacity: 0; } }
+@keyframes mxOlympusIn { from { opacity: 0; transform: scale(1.08); } to { opacity: 0.34; transform: scale(1.02); } }
+
+/* ═══════════════ texture helpers ═══════════════ */
+.mx-grain {
+  position: absolute;
+  inset: 0;
+  background: url("/assets/grain.svg");
+  background-size: 280px 280px;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: screen;
+}
+.mx-grain-light {
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+}
+.mx-contours {
+  position: absolute;
+  background: url("/assets/contours-ink.svg") center / contain no-repeat;
+  pointer-events: none;
+  animation: mxSpin 320s linear infinite;
+}
+.mx-contours-ivory {
+  background-image: url("/assets/contours-ivory.svg");
 }
 
-@keyframes drift {
-  from {
-    background-position: 0 0, 0 0;
-  }
-  to {
-    background-position: 600px 300px, -400px 200px;
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-.shimmer-text {
-  background: linear-gradient(90deg, var(--color-ink-3) 25%, var(--color-gold) 50%, var(--color-ink-3) 75%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer 2.4s linear infinite;
-}
-
-@keyframes stepForward {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* motion is liturgy, not confetti — honor reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;

@@ -1,37 +1,33 @@
 import { useEffect, useState } from "react";
-import { Council } from "./components/Council.js";
-import { Forge } from "./components/Forge.js";
-import { Loom } from "./components/Loom.js";
-import { Observatory } from "./components/Observatory.js";
-import { Orb } from "./components/Orb.js";
+import { Council } from "./screens/Council.js";
+import { FirstMeeting } from "./screens/FirstMeeting.js";
+import { Forge } from "./screens/Forge.js";
+import { Loom } from "./screens/Loom.js";
+import { Observatory } from "./screens/Observatory.js";
+import { Olympus } from "./screens/Olympus.js";
+import { Veil } from "./screens/Veil.js";
+import { WeeklyCouncil } from "./screens/WeeklyCouncil.js";
 import { ProvingGround } from "./components/ProvingGround.js";
-import { Veil } from "./components/Veil.js";
+import { useLenis } from "./lib/useLenis.js";
 
-type View = "council" | "loom" | "observatory" | "forge" | "proving";
+type View = "onboarding" | "olympus" | "council" | "loom" | "observatory" | "forge" | "weekly" | "proving";
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 5) return "The night is deep, Ohad.";
-  if (h < 12) return "Good morning, Ohad.";
-  if (h < 18) return "Good afternoon, Ohad.";
-  return "Good evening, Ohad.";
-}
-
-function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="font-label text-sm uppercase tracking-[0.2em] transition"
-      style={{ color: active ? "var(--color-gold)" : "var(--color-ink-3)" }}
-    >
-      {label}
-    </button>
-  );
-}
+const MENU: Array<{ view: View; label: string }> = [
+  { view: "olympus", label: "Olympus" },
+  { view: "council", label: "The Council" },
+  { view: "loom", label: "The Loom" },
+  { view: "observatory", label: "The Observatory" },
+  { view: "forge", label: "The Forge" },
+  { view: "weekly", label: "The Weekly Council" },
+  { view: "proving", label: "The Proving Ground" },
+  { view: "onboarding", label: "The First Meeting" },
+];
 
 export function App() {
+  useLenis();
+  const [view, setView] = useState<View>("olympus");
   const [veilOpen, setVeilOpen] = useState(false);
-  const [view, setView] = useState<View>("council");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -40,58 +36,80 @@ export function App() {
         setVeilOpen((v) => !v);
       } else if (e.key === "Escape") {
         setVeilOpen(false);
+        setMenuOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const go = (v: string) => {
+    if (v === "veil") setVeilOpen(true);
+    else setView(v as View);
+    setMenuOpen(false);
+  };
+
   return (
-    <div className="flex h-screen flex-col bg-s0 text-ink">
-      <nav className="flex shrink-0 items-center justify-between border-b border-hairline px-5 py-3">
-        <span className="font-display text-lg uppercase tracking-[0.3em] text-gold">Maxwell</span>
-        <div className="flex gap-6">
-          <Tab label="Council" active={view === "council"} onClick={() => setView("council")} />
-          <Tab label="The Loom" active={view === "loom"} onClick={() => setView("loom")} />
-          <Tab label="Observatory" active={view === "observatory"} onClick={() => setView("observatory")} />
-          <Tab label="Forge" active={view === "forge"} onClick={() => setView("forge")} />
-          <Tab label="Proving Ground" active={view === "proving"} onClick={() => setView("proving")} />
-        </div>
-        <button
-          onClick={() => setVeilOpen((v) => !v)}
-          className="font-mono text-xs text-ink-3 transition hover:text-gold"
-          title="Behind the Veil"
-        >
-          ⌘. veil
-        </button>
-      </nav>
+    <div className="min-h-screen bg-bone text-obsidian">
+      {view === "onboarding" ? (
+        <FirstMeeting onComplete={() => setView("olympus")} />
+      ) : view === "olympus" ? (
+        <Olympus onNavigate={go} />
+      ) : view === "council" ? (
+        <Council />
+      ) : view === "loom" ? (
+        <Loom />
+      ) : view === "observatory" ? (
+        <Observatory onReturn={() => setView("olympus")} />
+      ) : view === "forge" ? (
+        <Forge />
+      ) : view === "weekly" ? (
+        <WeeklyCouncil />
+      ) : (
+        <ProvingGround />
+      )}
 
-      <main className="min-h-0 flex-1">
-        {view === "council" ? (
-          <div className="flex h-full flex-col">
-            <header className="relative shrink-0 border-b border-hairline">
-              <Orb />
-              <div className="pb-4 text-center">
-                <p className="font-display text-xl tracking-wide text-ink">{greeting()}</p>
-                <p className="mt-1 font-label text-sm tracking-widest text-ink-3">the council is assembled</p>
-              </div>
-            </header>
-            <div className="min-h-0 flex-1">
-              <Council />
+      {/* compact corner menu — unobtrusive over the full-bleed designs */}
+      {view !== "onboarding" && (
+        <div className="fixed left-5 top-5 z-[70]">
+          <button
+            onClick={() => setMenuOpen((m) => !m)}
+            className="font-label text-[11px] uppercase tracking-[0.3em] text-gold transition hover:text-goldhover"
+            style={{ mixBlendMode: "normal" }}
+          >
+            {menuOpen ? "✕ CLOSE" : "☰ MAXWELL"}
+          </button>
+          {menuOpen && (
+            <div
+              className="mt-3 flex flex-col gap-1 border border-stone bg-ivory/95 p-3 backdrop-blur"
+              style={{ boxShadow: "0 30px 60px -30px rgba(20,19,26,.4)" }}
+            >
+              {MENU.map((m) => (
+                <button
+                  key={m.view}
+                  onClick={() => go(m.view)}
+                  className="text-left font-label text-[12px] uppercase tracking-[0.24em] transition"
+                  style={{ color: view === m.view ? "#C6A15B" : "#14131A", padding: "6px 10px" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#C6A15B")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = view === m.view ? "#C6A15B" : "#14131A")}
+                >
+                  {m.label}
+                </button>
+              ))}
+              <div className="my-1 h-px bg-stone" />
+              <button
+                onClick={() => go("veil")}
+                className="text-left font-mono text-[11px] text-mist transition hover:text-gold"
+                style={{ padding: "6px 10px" }}
+              >
+                ⌘. Behind the Veil
+              </button>
             </div>
-          </div>
-        ) : view === "loom" ? (
-          <Loom />
-        ) : view === "observatory" ? (
-          <Observatory />
-        ) : view === "forge" ? (
-          <Forge />
-        ) : (
-          <ProvingGround />
-        )}
-      </main>
+          )}
+        </div>
+      )}
 
-      <Veil open={veilOpen} />
+      <Veil open={veilOpen} onClose={() => setVeilOpen(false)} />
     </div>
   );
 }
