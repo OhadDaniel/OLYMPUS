@@ -1,7 +1,7 @@
 # MAXWELL — the Greek-pantheon council for your week
 
 **One-liner:** A personal life-orchestration agent — a council of specialist gods that reads your real calendar and inbox, *proposes* a week, and (only with your approval) weaves it into a schedule of record it then keeps over Telegram.
-**Built by:** Ohad Daniel · **Repo (public):** https://github.com/OhadDaniel/OLYMPUS · **Demo (live UI):** https://maxwell-app-nu.vercel.app · **Try it:** `npm install && npm test && npm run eval` (17 unit tests + 55/55 eval gate, no secrets needed)
+**Built by:** Ohad Daniel · **Repo (public):** https://github.com/OhadDaniel/OLYMPUS · **Live app:** https://maxwell-app-nu.vercel.app (front end on Vercel → hosted agent backend on Render + MongoDB Atlas) · **Try it:** `npm install && npm test && npm run eval` (17 unit tests + 55/55 eval gate, no secrets needed)
 
 ---
 
@@ -61,5 +61,5 @@ If this kept going, the moat is **the Scroll** — a compounding, private model 
 ## 10. Evidence index  *(curated)*
 - **Runnable tests (lead):** `npm test` → 17/17 (placer/differ/guardrails); `npm run eval` → 55/55 gate·injection·scheduler·council. Captured runs in `./evidence/`.
 - **Repo (public):** https://github.com/OhadDaniel/OLYMPUS — start at `src/loop.ts`, `src/workflows/guardrails.ts`, `src/tools/proposals.ts`, `src/council.ts`, `scripts/eval.ts`.
-- **Live UI:** https://maxwell-app-nu.vercel.app — the front end / design (the agent backend runs locally; reproduce behavior via the tests above).
+- **Live app (public URL):** https://maxwell-app-nu.vercel.app — front end on Vercel calling a hosted agent backend (Render + MongoDB Atlas). Open it and speak to the Council; replies stream live from the real harness. *(Backend is on a free tier that sleeps when idle — the first request may take ~30s to cold-start.)*
 - **Captured runs:** `./evidence/test-run.txt` (17/17) and `./evidence/eval-run.txt` (55/55) — the exact console output, reproducible with the two commands above.
