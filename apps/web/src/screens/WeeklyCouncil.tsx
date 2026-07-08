@@ -1,302 +1,626 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GodId } from "../../../../src/types.js";
-import { API_URL } from "../lib/api.js";
-import { GODS_DESIGN } from "../lib/design.js";
+import { API_URL, streamChat, type ChatFrame } from "../lib/api.js";
+import { GODS_DESIGN, roman, tint } from "../lib/design.js";
 import { GodIcon } from "../components/GodIcon.js";
 
 /* ------------------------------------------------------------------ *
- * The Weekly Council — the Rite of Review.
- * Five voices report (lifecycle spawn → working → done/silent), then
- * Zeus speaks a streamed verdict (wins → data → tips → questions) and
- * a NEXT WEEK diff card offers the one change. CONVENE AGAIN replays.
- * Data arrives over POST /council/start as an SSE stream.
+ * The Weekly Council — the weekend Rite of Review, held as a real
+ * CONVERSATION (not a report). Maxwell opens by reflecting on the week
+ * just past in real numbers, then talks it through with Ohad and, when
+ * he is ready, offers next week as a proposal he alone seals.
+ *
+ * Weekend-gated (Sat/Sun); on weekdays the council rests, with a quiet
+ * "convene early" for when he wants it anyway. Everything streams live
+ * over POST /chat with mode:"council" — nothing here is scripted.
  * ------------------------------------------------------------------ */
 
-// ---- SSE frames the council stream emits -------------------------------
-interface CouncilReport {
-  godId: GodId;
-  headline: string;
-  wins: string[];
-  concerns: string[];
-  tip: string;
-  oneQuestion: string;
-}
-type CouncilFrame =
-  | { type: "status"; text: string }
-  | { type: "subagent"; godId: GodId; state: "spawned" | "working" | "done" | "silent" }
-  | { type: "reports"; reports: CouncilReport[] }
-  | { type: "token"; text: string }
-  | { type: "proposal"; id: string }
-  | { type: "done"; output: string };
+const CB = "cubic-bezier(.22,1,.36,1)";
+const GOLD = "#C6A15B";
+const GOLD_LIGHT = "#E8C87E";
+const INK = "#EDE6D6";
+const VOID = "#0B0A10";
+const PANEL = "#15141B";
 
-/** POST /council/start and stream SSE frames (same `data: {json}\n\n` framing
- *  as streamChat). Resolves when the stream ends. */
-async function streamCouncil(
-  onFrame: (frame: CouncilFrame) => void,
-  signal: AbortSignal,
-): Promise<void> {
-  const res = await fetch(`${API_URL}/council/start`, { method: "POST", signal });
-  if (!res.ok || !res.body) throw new Error(`council request failed: ${res.status}`);
+const LIVE_GIF: Record<GodId, string> = {
+  zeus: "zeus-live.gif",
+  athena: "athena-nike-live.gif",
+  apollo: "apollo-laurel-live.gif",
+  hermes: "hermes-live.gif",
+  asclepius: "asclepius-live.gif",
+  hestia: "hestia-live.gif",
+};
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-    for (const chunk of chunks) {
-      const line = chunk.trim();
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload) continue;
-      try {
-        onFrame(JSON.parse(payload) as CouncilFrame);
-      } catch {
-        /* ignore malformed frame */
-      }
-    }
-  }
+let _seq = 0;
+const uid = (): string => `w${_seq++}`;
+
+function isoWeek(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
-// ---- The arc of five (Zeus presides above; these five report) ----------
-type GodState = "hidden" | "spawned" | "working" | "done" | "silent";
-const COUNCIL: Array<{ id: GodId; arc: number; img: string }> = [
-  { id: "athena", arc: 26, img: "athena-nike-live.gif" },
-  { id: "asclepius", arc: 10, img: "asclepius-live.gif" },
-  { id: "hermes", arc: 0, img: "hermes-live.gif" },
-  { id: "hestia", arc: 10, img: "hestia-live.gif" },
-  { id: "apollo", arc: 26, img: "apollo-laurel-live.gif" },
-];
-const COUNCIL_IDS: GodId[] = COUNCIL.map((g) => g.id);
+/* --------------------------- small pieces ------------------------- */
 
-// ---- Static "planned vs lived" data (design-authored; no wire source) --
-const DATA_ROWS: Array<{ id: GodId; plan: number; live: number; label: string }> = [
-  { id: "athena", plan: 100, live: 92, label: "12h / 11h" },
-  { id: "asclepius", plan: 25, live: 17, label: "3h / 2h" },
-  { id: "hermes", plan: 17, live: 0, label: "2h / —" },
-  { id: "hestia", plan: 33, live: 33, label: "4h / 4h" },
-  { id: "apollo", plan: 17, live: 9, label: "2h / 1h" },
-];
-
-// ---- Static NEXT WEEK diff (design-authored) ---------------------------
-const DIFF_ROWS: Array<{
-  glyph: string;
-  rgb: string | null;
-  label: string;
-  when: string;
-  strike?: boolean;
-}> = [
-  { glyph: "+", rgb: "79,140,130", label: "ADD — THIRD RUN", when: "Sat 08:00" },
-  { glyph: "→", rgb: "124,140,166", label: "MOVE — DEEP WORK", when: "Thu 09:00 → 08:30" },
-  { glyph: "+", rgb: "226,130,60", label: "ADD — CALL MOTHER", when: "Sun 17:00" },
-  { glyph: "−", rgb: null, label: "REMOVE — LATE SYNC", when: "Thu — rest is sacred", strike: true },
-];
-
-const EASE = "cubic-bezier(.22,1,.36,1)";
-const rise = (delay: number): string => `mxRise 1s ${EASE} ${delay}s both`;
-
-// ---- A council card image: live gif, or a tinted plate on 404 ----------
-function CardImage({ src, id, filter }: { src: string; id: GodId; filter: string }) {
+/** Round portrait; falls back to a dark marble plate + icon on 404. */
+function Portrait({ god, size, ring }: { god: GodId; size: number; ring?: boolean }) {
   const [failed, setFailed] = useState(false);
-  const g = GODS_DESIGN[id];
+  const d = GODS_DESIGN[god];
+  const ringStyle = ring ? { boxShadow: `0 0 0 2px ${tint(d.rgb, 0.45)}` } : {};
   if (failed) {
     return (
       <div
         style={{
-          width: "100%",
-          height: 104,
+          width: size,
+          height: size,
+          borderRadius: "50%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: `linear-gradient(160deg, rgba(${g.rgb},.18), rgba(11,10,16,.6))`,
-          filter,
-          transition: "filter 1.2s",
+          background: `linear-gradient(160deg, ${tint(d.rgb, 0.22)}, rgba(11,10,16,.7))`,
+          border: `1px solid ${tint(d.rgb, 0.4)}`,
+          ...ringStyle,
         }}
       >
-        <GodIcon icon={g.icon} color={g.hue} size={34} />
+        <GodIcon icon={d.icon} color={d.hue} size={Math.round(size * 0.46)} />
       </div>
     );
   }
   return (
     <img
-      src={`/assets/${src}`}
-      alt={g.name}
+      src={`/assets/${LIVE_GIF[god]}`}
+      alt={d.name}
       onError={() => setFailed(true)}
-      style={{ width: "100%", height: 104, objectFit: "cover", filter, transition: "filter 1.2s" }}
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", ...ringStyle }}
     />
   );
 }
 
-export function WeeklyCouncil() {
-  const [phase, setPhase] = useState<"rite" | "verdict">("rite");
-  const [status, setStatus] = useState("");
-  const [godStates, setGodStates] = useState<Record<GodId, GodState>>({
-    zeus: "hidden",
-    athena: "hidden",
-    asclepius: "hidden",
-    hermes: "hidden",
-    hestia: "hidden",
-    apollo: "hidden",
-  });
-  const [reports, setReports] = useState<Partial<Record<GodId, CouncilReport>>>({});
-  const [synthesis, setSynthesis] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [diff, setDiff] = useState<"open" | "sealed">("open");
-  const [convening, setConvening] = useState(false);
+/** Streamed text in 3-word groups (matches the council's cadence). */
+function TokenGroups({ text, italic = false, size = 16, color = INK }: { text: string; italic?: boolean; size?: number; color?: string }) {
+  const words = text.trim().length ? text.trim().split(/\s+/) : [];
+  const groups: string[] = [];
+  for (let i = 0; i < words.length; i += 3) groups.push(words.slice(i, i + 3).join(" ") + " ");
+  return (
+    <p
+      style={{
+        margin: 0,
+        fontSize: size,
+        lineHeight: italic ? 1.6 : 1.75,
+        color,
+        maxWidth: "58ch",
+        fontFamily: italic ? "'Cormorant Garamond',Georgia,serif" : "'Schibsted Grotesk',sans-serif",
+        fontStyle: italic ? "italic" : undefined,
+      }}
+    >
+      {groups.map((g, i) => (
+        <span key={i} style={{ opacity: 0, animation: `mxToken .8s ${CB} ${i * 0.02}s both` }}>
+          {g}
+        </span>
+      ))}
+    </p>
+  );
+}
 
-  const synthRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+function MaxwellHead() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <Portrait god="zeus" size={40} />
+      <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".32em", color: GOLD }}>MAXWELL</span>
+    </div>
+  );
+}
 
-  const setGod = useCallback((id: GodId, s: GodState) => {
-    setGodStates((prev) => (prev[id] === s ? prev : { ...prev, [id]: s }));
-  }, []);
+/** A god steps forward — hue-tinted passage. */
+function StepForward({ god, text }: { god: GodId; text: string }) {
+  const d = GODS_DESIGN[god];
+  return (
+    <div
+      style={{
+        marginLeft: 52,
+        background: tint(d.rgb, 0.08),
+        borderTop: `1px solid ${tint(d.rgb, 0.4)}`,
+        borderBottom: `1px solid ${tint(d.rgb, 0.4)}`,
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <Portrait god={god} size={34} ring />
+        <span
+          style={{
+            fontFamily: "'Cormorant SC',serif",
+            fontSize: 10,
+            letterSpacing: ".3em",
+            color: d.hue,
+            background: tint(d.rgb, 0.12),
+            border: `1px solid ${tint(d.rgb, 0.35)}`,
+            padding: "5px 11px",
+          }}
+        >
+          {d.name} — STEPS FORWARD
+        </span>
+      </div>
+      <TokenGroups text={text} italic size={19} color={INK} />
+    </div>
+  );
+}
 
-  const startRite = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
+function ConsultedLine({ text }: { text: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, animation: `mxRise .8s ${CB} both` }}>
+      <div style={{ width: 5, height: 5, transform: "rotate(45deg)", background: GOLD }} />
+      <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 10, letterSpacing: ".28em", color: tint("237,230,214", 0.55) }}>
+        {text}
+      </span>
+    </div>
+  );
+}
 
-    // Reset to the pristine rite.
-    setPhase("rite");
-    setStatus("");
-    setSynthesis("");
-    setDiff("open");
-    setReports({});
-    setStreaming(true);
-    setConvening(true);
-    setGodStates({
-      zeus: "hidden",
-      athena: "hidden",
-      asclepius: "hidden",
-      hermes: "hidden",
-      hestia: "hidden",
-      apollo: "hidden",
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+function UserBubble({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        alignSelf: "flex-end",
+        maxWidth: "46ch",
+        background: "#1E1C25",
+        border: "1px solid rgba(237,230,214,.12)",
+        borderRadius: 2,
+        padding: "14px 18px",
+        fontSize: 15,
+        lineHeight: 1.65,
+        color: "rgba(237,230,214,.9)",
+        fontFamily: "'Schibsted Grotesk',sans-serif",
+        animation: `mxRise .9s ${CB} both`,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
 
+/* --------------------------- proposal card ------------------------ */
+
+interface ProposalDetail {
+  ok: boolean;
+  status?: string;
+  diff?: {
+    adds: Array<{ godId: GodId; title: string; start: string; end: string }>;
+    moves: Array<{ title: string; godId: GodId | null; toStart: string; toEnd: string }>;
+    deletes: Array<{ title: string; godId: GodId | null }>;
+  };
+}
+
+function fmtWhen(iso: string): string {
+  const d = new Date(iso);
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${wd} ${hh}:${mm}`;
+}
+
+/** The next-week proposal — real rows from GET /proposals/:id; APPROVE weaves
+ *  it into the Loom through the human-gated approval path. */
+function CouncilProposal({ pid }: { pid: string }) {
+  const [detail, setDetail] = useState<ProposalDetail | null>(null);
+  const [state, setState] = useState<"open" | "sealing" | "sealed">("open");
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_URL}/proposals/${pid}`)
+      .then((r) => r.json())
+      .then((d: ProposalDetail) => {
+        if (alive) setDetail(d);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [pid]);
+
+  const approve = async () => {
+    setState("sealing");
     try {
-      await streamCouncil((frame) => {
-        switch (frame.type) {
-          case "status":
-            setStatus(frame.text);
-            break;
-          case "subagent":
-            setGod(frame.godId, frame.state);
-            break;
-          case "reports": {
-            const map: Partial<Record<GodId, CouncilReport>> = {};
-            for (const r of frame.reports) map[r.godId] = r;
-            setReports(map);
-            setPhase("verdict");
-            break;
-          }
-          case "token":
-            setPhase("verdict");
-            setSynthesis((prev) => prev + frame.text);
-            break;
-          case "proposal":
-            // proposal id noted; the diff card offers the seal.
-            break;
-          case "done":
-            setStreaming(false);
-            break;
-        }
-      }, ac.signal);
-      setStreaming(false);
-    } catch (err) {
-      if (!ac.signal.aborted) {
-        setStreaming(false);
-        setStatus("The council could not convene — the line to Olympus is silent.");
-      }
-    } finally {
-      if (!ac.signal.aborted) setConvening(false);
+      const r = await fetch(`${API_URL}/proposals/${pid}/approve`, { method: "POST" });
+      const j = (await r.json()) as { ok?: boolean };
+      setState(j.ok === false ? "open" : "sealed");
+    } catch {
+      setState("open");
     }
-  }, [setGod]);
+  };
 
-  // Auto-convene on mount; abort any live stream on unmount.
-  useEffect(() => {
-    void startRite();
-    return () => abortRef.current?.abort();
-  }, [startRite]);
+  const rows: Array<{ sign: string; rgb: string; label: string; when: string }> = [];
+  if (detail?.diff) {
+    for (const a of detail.diff.adds)
+      rows.push({ sign: "+", rgb: GODS_DESIGN[a.godId]?.rgb ?? "198,161,91", label: `ADD — ${a.title.toUpperCase()}`, when: fmtWhen(a.start) });
+    for (const m of detail.diff.moves)
+      rows.push({ sign: "→", rgb: "124,140,166", label: `MOVE — ${m.title.toUpperCase()}`, when: fmtWhen(m.toStart) });
+    for (const d of detail.diff.deletes)
+      rows.push({ sign: "−", rgb: "138,133,122", label: `REMOVE — ${d.title.toUpperCase()}`, when: "—" });
+  }
+  const already = detail?.status === "applied";
 
-  // Scroll to the synthesis once the verdict rises.
-  useEffect(() => {
-    if (phase !== "verdict" || !synthRef.current) return;
-    const el = synthRef.current;
-    const t = window.setTimeout(
-      () => window.scrollTo({ top: el.offsetTop - 80, behavior: "smooth" }),
-      500,
+  return (
+    <div
+      style={{
+        marginLeft: 52,
+        maxWidth: 560,
+        background: PANEL,
+        border: `1px solid ${state === "sealed" || already ? tint("198,161,91", 0.6) : "rgba(237,230,214,.16)"}`,
+        borderRadius: 2,
+        padding: "20px 22px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        transition: "border-color .8s",
+        animation: `mxRise 1s ${CB} both`,
+        boxShadow: "0 40px 90px -50px rgba(0,0,0,.8)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline" }}>
+        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 10, letterSpacing: ".3em", color: GOLD }}>
+          NEXT WEEK — THE COUNCIL PROPOSES
+        </span>
+        <span style={{ marginLeft: "auto", fontFamily: "'Fraunces',Georgia,serif", fontStyle: "italic", fontSize: 14, color: tint("237,230,214", 0.5) }}>
+          {rows.length} change{rows.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {!detail && (
+        <span style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 15, color: tint("237,230,214", 0.5) }}>
+          drawing up the week…
+        </span>
+      )}
+
+      {rows.map((r, i) => (
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 12,
+            background: tint(r.rgb, 0.08),
+            border: `1px solid ${tint(r.rgb, 0.35)}`,
+            borderRadius: 2,
+            padding: "11px 14px",
+          }}
+        >
+          <span style={{ fontFamily: "'Fraunces',Georgia,serif", fontSize: 16, color: `rgb(${r.rgb})` }}>{r.sign}</span>
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".22em", color: INK }}>{r.label}</span>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: tint("237,230,214", 0.5) }}>{r.when}</span>
+        </div>
+      ))}
+
+      {state !== "sealed" && !already ? (
+        <button
+          type="button"
+          onClick={() => void approve()}
+          disabled={!detail || state === "sealing"}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = GOLD;
+            e.currentTarget.style.color = VOID;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = GOLD_LIGHT;
+          }}
+          style={{
+            alignSelf: "flex-start",
+            marginTop: 4,
+            fontFamily: "'Cormorant SC',serif",
+            fontSize: 12,
+            letterSpacing: ".3em",
+            color: GOLD_LIGHT,
+            background: "transparent",
+            border: `1px solid ${GOLD}`,
+            padding: "13px 26px",
+            borderRadius: 2,
+            cursor: !detail || state === "sealing" ? "default" : "pointer",
+            opacity: !detail || state === "sealing" ? 0.5 : 1,
+            transition: `all .7s ${CB}`,
+          }}
+        >
+          {state === "sealing" ? "WEAVING…" : "SEAL NEXT WEEK —"}
+        </button>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+          <div style={{ width: 6, height: 6, background: GOLD_LIGHT, transform: "rotate(45deg)" }} />
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".28em", color: GOLD_LIGHT }}>
+            SEALED — WOVEN INTO THE LOOM
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* --------------------------- conversation ------------------------- */
+
+type LiveEntry =
+  | { kind: "user"; id: string; text: string }
+  | { kind: "voice"; id: string; god: GodId; text: string }
+  | { kind: "consulted"; id: string; text: string }
+  | { kind: "proposal"; id: string; pid: string };
+
+function LiveEntryView({ entry }: { entry: LiveEntry }) {
+  if (entry.kind === "user") return <UserBubble text={entry.text} />;
+  if (entry.kind === "consulted") return <ConsultedLine text={entry.text} />;
+  if (entry.kind === "proposal") return <CouncilProposal pid={entry.pid} />;
+  if (entry.god === "zeus") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, animation: `mxRise .9s ${CB} both` }}>
+        <MaxwellHead />
+        <div style={{ marginLeft: 52 }}>
+          <TokenGroups text={entry.text} />
+        </div>
+      </div>
     );
-    return () => window.clearTimeout(t);
-  }, [phase]);
+  }
+  return (
+    <div style={{ animation: `mxRise 1s ${CB} both` }}>
+      <StepForward god={entry.god} text={entry.text} />
+    </div>
+  );
+}
 
-  const wins = COUNCIL_IDS.flatMap((id) => reports[id]?.wins ?? []);
-  const tips = COUNCIL_IDS.map((id) => ({ id, tip: reports[id]?.tip })).filter(
-    (t): t is { id: GodId; tip: string } => Boolean(t.tip),
-  );
-  const questions = COUNCIL_IDS.map((id) => reports[id]?.oneQuestion).filter(
-    (q): q is string => Boolean(q),
-  );
+/* ------------------------------ screen ---------------------------- */
+
+export function WeeklyCouncil() {
+  const now = new Date();
+  const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+  const [entered, setEntered] = useState(isWeekend);
+
+  const [entries, setEntries] = useState<LiveEntry[]>([]);
+  const [draft, setDraft] = useState("");
+  const [statusText, setStatusText] = useState<string | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  const [inputFocus, setInputFocus] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sessionId = useRef<string | undefined>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
+  const statusRef = useRef<string | null>(null);
+  const currentGod = useRef<GodId>("zeus");
+  const started = useRef(false);
+
+  const setStatus = (v: string | null) => {
+    statusRef.current = v;
+    setStatusText(v);
+  };
+
+  const scrollDown = () =>
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    });
+
+  const onFrame = (frame: ChatFrame) => {
+    switch (frame.type) {
+      case "session":
+        sessionId.current = frame.id;
+        break;
+      case "token": {
+        const consult = statusRef.current;
+        if (consult) setStatus(null);
+        setEntries((prev) => {
+          const copy = prev.slice();
+          const last = copy[copy.length - 1];
+          if (last && last.kind === "voice") {
+            copy[copy.length - 1] = { ...last, text: last.text + frame.text };
+          } else {
+            if (consult) copy.push({ kind: "consulted", id: uid(), text: consult });
+            copy.push({ kind: "voice", id: uid(), god: currentGod.current, text: frame.text });
+          }
+          return copy;
+        });
+        scrollDown();
+        break;
+      }
+      case "god": {
+        const consult = statusRef.current;
+        setStatus(null);
+        currentGod.current = frame.godId;
+        setEntries((prev) => {
+          const copy = prev.slice();
+          if (consult) copy.push({ kind: "consulted", id: uid(), text: consult });
+          copy.push({ kind: "voice", id: uid(), god: frame.godId, text: "" });
+          return copy;
+        });
+        scrollDown();
+        break;
+      }
+      case "status":
+        setStatus(frame.text.toUpperCase());
+        break;
+      case "tool_start":
+        setStatus("CONSULTING THE OUTER WORLD…");
+        break;
+      case "proposal":
+        setEntries((prev) => [...prev, { kind: "proposal", id: uid(), pid: frame.id }]);
+        scrollDown();
+        break;
+      case "error":
+        setStatus(null);
+        break;
+      case "done":
+      case "__end__":
+        setStatus(null);
+        setStreaming(false);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const run = useCallback(async (message: string) => {
+    currentGod.current = "zeus";
+    setStreaming(true);
+    setStatus(entries.length === 0 ? "THE COUNCIL CONVENES…" : "WEIGHING…");
+    scrollDown();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    try {
+      await streamChat({ message, sessionId: sessionId.current, mode: "council" }, onFrame, ctrl.signal);
+    } catch {
+      setStatus(null);
+      setStreaming(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length]);
+
+  // The council opens the conversation once, on entry.
+  useEffect(() => {
+    if (!entered || started.current) return;
+    started.current = true;
+    void run("The weekend council convenes. Open the review of the week just past, then let us design the next together.");
+    return () => abortRef.current?.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entered]);
+
+  const send = () => {
+    const message = draft.trim();
+    if (!message || streaming) return;
+    setDraft("");
+    setEntries((prev) => [...prev, { kind: "user", id: uid(), text: message }]);
+    scrollDown();
+    void run(message);
+  };
+
+  /* ----------------------- weekday gate ----------------------- */
+  if (!entered) {
+    return (
+      <div
+        style={{
+          position: "relative",
+          minHeight: "100vh",
+          background: VOID,
+          color: INK,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 24,
+          textAlign: "center",
+          padding: "0 24px",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: -300,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 1100,
+            height: 1100,
+            background: "url('/assets/contours-ivory.svg') center / contain no-repeat",
+            opacity: 0.12,
+            animation: "mxSpin 380s linear infinite",
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            width: 46,
+            height: 46,
+            borderRadius: "50%",
+            background: "radial-gradient(circle at 35% 30%, #E8C87E, #C6A15B 62%, #9A7B40)",
+            animation: "mxOrb 5.6s ease-in-out infinite",
+            opacity: 0.6,
+          }}
+        />
+        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".5em", color: GOLD }}>
+          THE WEEKLY COUNCIL
+        </span>
+        <h1 style={{ margin: 0, fontFamily: "'Fraunces',Georgia,serif", fontWeight: 330, fontSize: 52, lineHeight: 1.05, color: INK, maxWidth: "18ch" }}>
+          The council convenes on the weekend.
+        </h1>
+        <p
+          style={{
+            margin: 0,
+            maxWidth: "44ch",
+            fontFamily: "'Cormorant Garamond',Georgia,serif",
+            fontStyle: "italic",
+            fontSize: 20,
+            lineHeight: 1.6,
+            color: tint("237,230,214", 0.6),
+          }}
+        >
+          Through the week the gods keep quiet watch. Come Saturday, Maxwell sends word — and here you sit with the
+          council to weigh the week just past and weave the next, together.
+        </p>
+        <button
+          type="button"
+          onClick={() => setEntered(true)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(198,161,91,.1)";
+            e.currentTarget.style.borderColor = GOLD;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.borderColor = "rgba(198,161,91,.4)";
+          }}
+          style={{
+            marginTop: 8,
+            fontFamily: "'Cormorant SC',serif",
+            fontSize: 11,
+            letterSpacing: ".32em",
+            color: GOLD_LIGHT,
+            background: "transparent",
+            border: "1px solid rgba(198,161,91,.4)",
+            padding: "13px 26px",
+            borderRadius: 2,
+            cursor: "pointer",
+            transition: `all .7s ${CB}`,
+          }}
+        >
+          CONVENE EARLY —
+        </button>
+      </div>
+    );
+  }
+
+  /* ----------------------- the conversation ----------------------- */
+  const weekNum = roman(isoWeek(now));
+  const shimmer =
+    streaming && statusText ? (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, animation: `mxRise .7s ${CB} both` }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: GOLD, animation: "mxOrb 1.6s ease-in-out infinite" }} />
+        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".3em", color: GOLD, animation: "mxShimmer 2.2s ease-in-out infinite" }}>
+          {statusText}
+        </span>
+      </div>
+    ) : null;
 
   return (
     <div
       data-screen-label="The Weekly Council"
-      style={{
-        position: "relative",
-        minHeight: "100vh",
-        background: "#0B0A10",
-        overflow: "hidden",
-        paddingBottom: 90,
-        color: "#EDE6D6",
-        fontFamily: "'Schibsted Grotesk','Helvetica Neue',sans-serif",
-      }}
+      style={{ position: "relative", height: "100vh", minHeight: 800, display: "flex", flexDirection: "column", background: VOID, color: INK, overflow: "hidden" }}
     >
-      {/* keyframe not in the global catalog */}
-      <style>{`@keyframes mxWorkPulse{0%,100%{box-shadow:0 0 0 0 rgba(198,161,91,0)}50%{box-shadow:0 0 34px 2px rgba(198,161,91,.2)}}`}</style>
-
       {/* Olympus haze */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 520,
-          overflow: "hidden",
-          pointerEvents: "none",
-        }}
-      >
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 460, overflow: "hidden", pointerEvents: "none" }}>
         <img
           src="/assets/olympus.gif"
           alt=""
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            opacity: 0.14,
-            filter: "grayscale(.4) brightness(.7)",
-          }}
+          onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+          style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.12, filter: "grayscale(.4) brightness(.7)" }}
         />
-        <div
-          style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(11,10,16,.3), #0B0A10)" }}
-        />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(11,10,16,.35), #0B0A10)" }} />
       </div>
       <div
         style={{
           position: "absolute",
-          top: -300,
+          top: -320,
           left: "50%",
           transform: "translateX(-50%)",
-          width: 1200,
-          height: 1200,
+          width: 1100,
+          height: 1100,
           background: "url('/assets/contours-ivory.svg') center / contain no-repeat",
-          opacity: 0.16,
+          opacity: 0.14,
           animation: "mxSpin 380s linear infinite",
           pointerEvents: "none",
         }}
@@ -310,651 +634,97 @@ export function WeeklyCouncil() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "26px 44px",
+          padding: "22px 44px",
+          borderBottom: "1px solid rgba(237,230,214,.12)",
+          background: "rgba(11,10,16,.55)",
+          backdropFilter: "blur(2px)",
         }}
       >
-        <span
-          style={{
-            fontFamily: "'Cormorant SC',serif",
-            fontSize: 11,
-            letterSpacing: ".32em",
-            color: "rgba(237,230,214,.5)",
-          }}
-        >
-          MAXWELL — THE RITE OF REVIEW
+        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 14, letterSpacing: ".34em", color: INK }}>THE WEEKLY COUNCIL</span>
+        <span style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 15, color: tint("237,230,214", 0.6) }}>
+          we weigh the week, and weave the next — together
         </span>
-        <button
-          type="button"
-          onClick={() => void startRite()}
-          disabled={convening && streaming}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "rgba(198,161,91,.08)";
-            e.currentTarget.style.borderColor = "#C6A15B";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.borderColor = "rgba(198,161,91,.4)";
-          }}
-          style={{
-            fontFamily: "'Cormorant SC',serif",
-            fontSize: 10,
-            letterSpacing: ".3em",
-            color: "#C6A15B",
-            background: "transparent",
-            border: "1px solid rgba(198,161,91,.4)",
-            padding: "10px 18px",
-            borderRadius: 2,
-            cursor: convening && streaming ? "default" : "pointer",
-            opacity: convening && streaming ? 0.5 : 1,
-            transition: `all .7s ${EASE}`,
-          }}
-        >
-          CONVENE AGAIN —
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: GOLD, animation: "mxOrb 4s ease-in-out infinite" }} />
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".26em", color: tint("237,230,214", 0.75) }}>
+            ZEUS PRESIDES — WEEK {weekNum}
+          </span>
+        </div>
       </div>
 
-      {/* Zeus presiding */}
-      <div
-        style={{
-          position: "relative",
-          zIndex: 2,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 18,
-          padding: "12px 0 40px",
-          animation: `mxRise 1.2s ${EASE} .2s both`,
-        }}
-      >
-        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 13, letterSpacing: ".54em", color: "#C6A15B" }}>
-          THE WEEKLY COUNCIL
-        </span>
-        <h1
-          style={{
-            margin: 0,
-            fontFamily: "'Fraunces',Georgia,serif",
-            fontWeight: 330,
-            fontSize: 64,
-            lineHeight: 1,
-            color: "#EDE6D6",
-          }}
-        >
-          Week XXVIII, weighed
-        </h1>
-        <span
-          style={{
-            fontFamily: "'Cormorant Garamond',Georgia,serif",
-            fontStyle: "italic",
-            fontSize: 19,
-            color: "rgba(237,230,214,.65)",
-          }}
-        >
-          Five voices report. One verdict is spoken.
-        </span>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginTop: 14 }}>
-          <div
+      {/* conversation */}
+      <div ref={scrollRef} style={{ position: "relative", zIndex: 2, flex: 1, overflowY: "auto" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", padding: "40px 24px 60px", display: "flex", flexDirection: "column", gap: 26 }}>
+          {entries.map((e) => (
+            <LiveEntryView key={e.id} entry={e} />
+          ))}
+          {shimmer}
+        </div>
+      </div>
+
+      {/* input */}
+      <div style={{ position: "relative", zIndex: 3, borderTop: "1px solid rgba(237,230,214,.12)", background: "rgba(11,10,16,.75)" }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", gap: 20, padding: "20px 24px" }}>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                send();
+              }
+            }}
+            onFocus={() => setInputFocus(true)}
+            onBlur={() => setInputFocus(false)}
+            placeholder="Speak with the council…"
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: "50%",
-              background: "radial-gradient(circle at 35% 30%, #E8C87E, #C6A15B 62%, #9A7B40)",
-              animation: "mxOrb 5.6s ease-in-out infinite",
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              borderBottom: `1px solid ${inputFocus ? GOLD : "rgba(237,230,214,.2)"}`,
+              outline: "none",
+              fontFamily: "'Cormorant Garamond',Georgia,serif",
+              fontStyle: "italic",
+              fontSize: 20,
+              color: INK,
+              padding: "9px 2px",
+              caretColor: GOLD,
+              transition: "border-color .7s",
             }}
           />
-          <span
+          <button
+            type="button"
+            onClick={send}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(198,161,91,.1)";
+              e.currentTarget.style.borderColor = GOLD;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.borderColor = "rgba(198,161,91,.5)";
+            }}
             style={{
               fontFamily: "'Cormorant SC',serif",
-              fontSize: 10,
-              letterSpacing: ".4em",
-              color: "rgba(237,230,214,.5)",
-            }}
-          >
-            ZEUS — PRESIDING
-          </span>
-          {phase === "rite" && status && (
-            <span
-              style={{
-                fontFamily: "'Cormorant Garamond',Georgia,serif",
-                fontStyle: "italic",
-                fontSize: 14,
-                color: "rgba(237,230,214,.45)",
-                animation: `mxToken .6s ${EASE} both`,
-              }}
-            >
-              {status}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* the council arc */}
-      <div
-        style={{
-          position: "relative",
-          zIndex: 2,
-          display: "grid",
-          gridTemplateColumns: "repeat(5, 1fr)",
-          gap: 18,
-          maxWidth: 1260,
-          margin: "0 auto",
-          padding: "0 44px",
-        }}
-      >
-        {COUNCIL.map((g) => {
-          const st = godStates[g.id];
-          const d = GODS_DESIGN[g.id];
-          const working = st === "working";
-          const done = st === "done";
-          const silent = st === "silent";
-          const visible = st !== "hidden";
-          const anim = working
-            ? `mxRise .9s ${EASE} both, mxWorkPulse 2.2s ease-in-out .9s infinite`
-            : st === "spawned"
-              ? `mxRise .9s ${EASE} both`
-              : "none";
-          return (
-            <div key={g.id} style={{ transform: `translateY(${g.arc}px)` }}>
-              <div
-                style={{
-                  opacity: visible ? (silent ? 0.5 : 1) : 0,
-                  animation: anim,
-                  background: "#15141B",
-                  border: `1px solid ${done ? `rgba(${d.rgb},.55)` : "rgba(237,230,214,.12)"}`,
-                  borderRadius: 2,
-                  overflow: "hidden",
-                  transition: "border-color 1.2s, opacity 1.2s",
-                }}
-              >
-                <div
-                  style={{
-                    height: 2,
-                    background: done ? d.hue : "rgba(237,230,214,.1)",
-                    transition: "background 1.2s",
-                  }}
-                />
-                <div style={{ padding: "16px 18px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
-                  <CardImage
-                    src={g.img}
-                    id={g.id}
-                    filter={done ? "grayscale(0) brightness(.95)" : "grayscale(1) brightness(.55)"}
-                  />
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <span
-                      style={{
-                        fontFamily: "'Cormorant SC',serif",
-                        fontSize: 12,
-                        letterSpacing: ".26em",
-                        color: done ? d.hue : "rgba(237,230,214,.65)",
-                        transition: "color 1.2s",
-                      }}
-                    >
-                      {d.name}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "'Cormorant SC',serif",
-                        fontSize: 8,
-                        letterSpacing: ".24em",
-                        color: "rgba(237,230,214,.4)",
-                      }}
-                    >
-                      {d.domain}
-                    </span>
-                  </div>
-                  <div style={{ minHeight: 70, display: "flex", alignItems: "flex-start" }}>
-                    {working && (
-                      <span
-                        style={{
-                          fontFamily: "'Cormorant SC',serif",
-                          fontSize: 10,
-                          letterSpacing: ".26em",
-                          color: "#E8C87E",
-                          animation: "mxShimmer 2s ease-in-out infinite",
-                        }}
-                      >
-                        WEIGHING THE WEEK…
-                      </span>
-                    )}
-                    {done && (
-                      <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-                        <div
-                          style={{
-                            width: 5,
-                            height: 5,
-                            transform: "rotate(45deg)",
-                            background: d.hue,
-                            flex: "none",
-                          }}
-                        />
-                        <span
-                          style={{
-                            fontFamily: "'Cormorant Garamond',Georgia,serif",
-                            fontStyle: "italic",
-                            fontSize: 14.5,
-                            lineHeight: 1.5,
-                            color: "#EDE6D6",
-                          }}
-                        >
-                          {reports[g.id]?.headline ?? ""}
-                        </span>
-                      </div>
-                    )}
-                    {silent && (
-                      <span
-                        style={{
-                          fontFamily: "'Cormorant SC',serif",
-                          fontSize: 10,
-                          letterSpacing: ".3em",
-                          color: "rgba(237,230,214,.35)",
-                        }}
-                      >
-                        SILENT THIS WEEK
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* the verdict */}
-      {phase === "verdict" && (
-        <div
-          ref={synthRef}
-          style={{
-            position: "relative",
-            zIndex: 2,
-            maxWidth: 880,
-            margin: "0 auto",
-            padding: "70px 44px 0",
-            display: "flex",
-            flexDirection: "column",
-            gap: 44,
-          }}
-        >
-          {/* divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: 18, animation: rise(0.2) }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(198,161,91,.35)" }} />
-            <span
-              style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".44em", color: "#C6A15B" }}
-            >
-              ZEUS SPEAKS — THE SYNTHESIS
-            </span>
-            <div style={{ flex: 1, height: 1, background: "rgba(198,161,91,.35)" }} />
-          </div>
-
-          {/* streamed synthesis */}
-          {synthesis && (
-            <p
-              style={{
-                margin: 0,
-                fontFamily: "'Cormorant Garamond',Georgia,serif",
-                fontStyle: "italic",
-                fontSize: 20,
-                lineHeight: 1.6,
-                color: "rgba(237,230,214,.9)",
-              }}
-            >
-              {synthesis}
-              {streaming && (
-                <span style={{ color: "#E8C87E", animation: "mxShimmer 1.2s ease-in-out infinite" }}>▍</span>
-              )}
-            </p>
-          )}
-
-          {/* the wins */}
-          {wins.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16, animation: rise(0.6) }}>
-              <span
-                style={{
-                  fontFamily: "'Cormorant SC',serif",
-                  fontSize: 11,
-                  letterSpacing: ".32em",
-                  color: "rgba(237,230,214,.5)",
-                }}
-              >
-                THE WINS
-              </span>
-              {wins.map((w, i) => (
-                <div key={i} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                  <div
-                    style={{ width: 5, height: 5, transform: "rotate(45deg)", background: "#C6A15B", flex: "none" }}
-                  />
-                  <span style={{ fontSize: 17, lineHeight: 1.6, color: "#EDE6D6" }}>{w}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* the data — planned vs lived */}
-          <div
-            style={{
-              display: "flex",
-              gap: 48,
-              alignItems: "center",
-              borderTop: "1px solid rgba(237,230,214,.12)",
-              borderBottom: "1px solid rgba(237,230,214,.12)",
-              padding: "30px 0",
-              animation: rise(1.4),
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: "none" }}>
-              <span
-                style={{
-                  fontFamily: "'Fraunces',Georgia,serif",
-                  fontStyle: "italic",
-                  fontWeight: 330,
-                  fontSize: 108,
-                  lineHeight: 1,
-                  color: "#C6A15B",
-                }}
-              >
-                82
-              </span>
-              <span
-                style={{
-                  fontFamily: "'Cormorant SC',serif",
-                  fontSize: 10,
-                  letterSpacing: ".34em",
-                  color: "rgba(237,230,214,.5)",
-                }}
-              >
-                EXECUTION — OF C
-              </span>
-            </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 13 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span
-                  style={{
-                    fontFamily: "'Cormorant SC',serif",
-                    fontSize: 10,
-                    letterSpacing: ".3em",
-                    color: "rgba(237,230,214,.5)",
-                  }}
-                >
-                  THE DATA — PLANNED VS LIVED
-                </span>
-                <span
-                  style={{
-                    fontFamily: "'Cormorant SC',serif",
-                    fontSize: 10,
-                    letterSpacing: ".24em",
-                    color: "rgba(237,230,214,.4)",
-                  }}
-                >
-                  23H SWORN · 18H KEPT
-                </span>
-              </div>
-              {DATA_ROWS.map((row) => {
-                const d = GODS_DESIGN[row.id];
-                return (
-                  <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <span
-                      style={{
-                        width: 86,
-                        fontFamily: "'Cormorant SC',serif",
-                        fontSize: 9,
-                        letterSpacing: ".2em",
-                        color: d.hue,
-                      }}
-                    >
-                      {d.name}
-                    </span>
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
-                      <div style={{ height: 3, width: `${row.plan}%`, background: "rgba(237,230,214,.18)" }} />
-                      <div style={{ height: 3, width: `${row.live}%`, background: d.hue }} />
-                    </div>
-                    <span
-                      style={{ width: 64, textAlign: "right", fontSize: 10.5, color: "rgba(237,230,214,.5)" }}
-                    >
-                      {row.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* one tip per god */}
-          {tips.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14, animation: rise(2.4) }}>
-              <span
-                style={{
-                  fontFamily: "'Cormorant SC',serif",
-                  fontSize: 11,
-                  letterSpacing: ".32em",
-                  color: "rgba(237,230,214,.5)",
-                }}
-              >
-                ONE TIP PER GOD
-              </span>
-              {tips.map(({ id, tip }) => {
-                const d = GODS_DESIGN[id];
-                return (
-                  <div key={id} style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
-                    <span
-                      style={{
-                        width: 86,
-                        flex: "none",
-                        fontFamily: "'Cormorant SC',serif",
-                        fontSize: 9,
-                        letterSpacing: ".2em",
-                        color: d.hue,
-                      }}
-                    >
-                      {d.name}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: "'Cormorant Garamond',Georgia,serif",
-                        fontStyle: "italic",
-                        fontSize: 16.5,
-                        color: "rgba(237,230,214,.85)",
-                      }}
-                    >
-                      {tip}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* zeus asks you */}
-          {questions.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 18, animation: rise(3.4) }}>
-              <span
-                style={{
-                  fontFamily: "'Cormorant SC',serif",
-                  fontSize: 11,
-                  letterSpacing: ".32em",
-                  color: "rgba(237,230,214,.5)",
-                }}
-              >
-                ZEUS ASKS YOU
-              </span>
-              {questions.map((q, i) => (
-                <p
-                  key={i}
-                  style={{
-                    margin: 0,
-                    fontFamily: "'Cormorant Garamond',Georgia,serif",
-                    fontStyle: "italic",
-                    fontSize: 21,
-                    lineHeight: 1.5,
-                    color: i === questions.length - 1 ? "#E8C87E" : "#EDE6D6",
-                  }}
-                >
-                  {q}
-                </p>
-              ))}
-              <span
-                style={{
-                  fontFamily: "'Cormorant SC',serif",
-                  fontSize: 9,
-                  letterSpacing: ".3em",
-                  color: "rgba(237,230,214,.4)",
-                }}
-              >
-                ANSWER IN THE COUNCIL — THE GODS REMEMBER
-              </span>
-            </div>
-          )}
-
-          {/* next week — one diff */}
-          <div
-            style={{
-              alignSelf: "center",
-              width: 640,
-              maxWidth: "100%",
-              background: "#15141B",
-              border: `1px solid ${diff === "sealed" ? "#C6A15B" : "rgba(198,161,91,.45)"}`,
+              fontSize: 11,
+              letterSpacing: ".3em",
+              color: GOLD_LIGHT,
+              background: "transparent",
+              border: "1px solid rgba(198,161,91,.5)",
+              padding: "12px 22px",
               borderRadius: 2,
-              padding: "26px 28px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 13,
-              transition: "border-color 1s",
-              animation: `mxRiseUp 1.2s ${EASE} 4.6s both`,
-              boxShadow: "0 40px 90px -40px rgba(0,0,0,.8)",
+              cursor: "pointer",
+              transition: `all .7s ${CB}`,
             }}
           >
-            <div style={{ display: "flex", alignItems: "baseline" }}>
-              <span
-                style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".34em", color: "#C6A15B" }}
-              >
-                NEXT WEEK — ONE DIFF
-              </span>
-              <span
-                style={{
-                  marginLeft: "auto",
-                  fontFamily: "'Fraunces',Georgia,serif",
-                  fontStyle: "italic",
-                  fontSize: 15,
-                  color: "rgba(237,230,214,.5)",
-                }}
-              >
-                Week XXIX
-              </span>
-            </div>
-            {DIFF_ROWS.map((r, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: 13,
-                  background: r.rgb ? `rgba(${r.rgb},.08)` : "rgba(237,230,214,.04)",
-                  border: `1px solid ${r.rgb ? `rgba(${r.rgb},.35)` : "rgba(237,230,214,.18)"}`,
-                  borderRadius: 2,
-                  padding: "12px 15px",
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: "'Fraunces',Georgia,serif",
-                    fontSize: 16,
-                    color: r.rgb ? `rgb(${r.rgb})` : "rgba(237,230,214,.5)",
-                  }}
-                >
-                  {r.glyph}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "'Cormorant SC',serif",
-                    fontSize: 11,
-                    letterSpacing: ".22em",
-                    color: r.strike ? "rgba(237,230,214,.6)" : "#EDE6D6",
-                    textDecoration: r.strike ? "line-through" : "none",
-                  }}
-                >
-                  {r.label}
-                </span>
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    fontSize: 11,
-                    color: r.strike ? "rgba(237,230,214,.4)" : "rgba(237,230,214,.5)",
-                  }}
-                >
-                  {r.when}
-                </span>
-              </div>
-            ))}
-            {diff === "open" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setDiff("sealed")}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#C6A15B";
-                    e.currentTarget.style.color = "#0B0A10";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "#E8C87E";
-                  }}
-                  style={{
-                    fontFamily: "'Cormorant SC',serif",
-                    fontSize: 12,
-                    letterSpacing: ".32em",
-                    color: "#E8C87E",
-                    background: "transparent",
-                    border: "1px solid #C6A15B",
-                    padding: "14px 28px",
-                    borderRadius: 2,
-                    cursor: "pointer",
-                    transition: `all .8s ${EASE}`,
-                  }}
-                >
-                  SEAL NEXT WEEK
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    /* amend flows to the Loom */
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "rgba(237,230,214,.8)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = "rgba(237,230,214,.45)";
-                  }}
-                  style={{
-                    fontFamily: "'Cormorant SC',serif",
-                    fontSize: 10,
-                    letterSpacing: ".3em",
-                    color: "rgba(237,230,214,.45)",
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "color .7s",
-                  }}
-                >
-                  AMEND IN THE LOOM —
-                </button>
-              </div>
-            )}
-            {diff === "sealed" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-                <div style={{ width: 6, height: 6, background: "#E8C87E", transform: "rotate(45deg)" }} />
-                <span
-                  style={{
-                    fontFamily: "'Cormorant SC',serif",
-                    fontSize: 11,
-                    letterSpacing: ".3em",
-                    color: "#E8C87E",
-                  }}
-                >
-                  SEALED — WEEK XXIX IS WOVEN
-                </span>
-              </div>
-            )}
-          </div>
+            SPEAK —
+          </button>
         </div>
-      )}
+        <div style={{ maxWidth: 800, margin: "0 auto", padding: "0 24px 14px" }}>
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 9, letterSpacing: ".28em", color: tint("237,230,214", 0.4) }}>
+            THE WEEKEND RITE — WHAT YOU SEAL HERE IS WOVEN INTO NEXT WEEK
+          </span>
+        </div>
+      </div>
 
       {/* grain */}
       <div

@@ -14,7 +14,7 @@ export class ChatController {
 
   @Post("chat")
   async chat(
-    @Body() body: { message?: string; sessionId?: string },
+    @Body() body: { message?: string; sessionId?: string; mode?: string },
     @Res() res: SseResponse,
   ): Promise<void> {
     res.writeHead(200, {
@@ -36,7 +36,7 @@ export class ChatController {
     }
 
     try {
-      await this.chatService.stream({ message, sessionId: body.sessionId }, send);
+      await this.chatService.stream({ message, sessionId: body.sessionId, mode: body.mode }, send);
     } catch (error) {
       send({ type: "error", message: error instanceof Error ? error.message : "chat failed" });
     } finally {

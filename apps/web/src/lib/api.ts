@@ -9,7 +9,7 @@ export type ChatFrame = { type: "session"; id: string } | AgentEvent | { type: "
 
 /** POST /chat and stream SSE frames to `onFrame`. Resolves when the stream ends. */
 export async function streamChat(
-  input: { message: string; sessionId?: string },
+  input: { message: string; sessionId?: string; mode?: "council" },
   onFrame: (frame: ChatFrame) => void,
   signal?: AbortSignal,
 ): Promise<void> {

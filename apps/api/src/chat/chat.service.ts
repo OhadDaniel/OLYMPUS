@@ -1,12 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions.js";
 import { USER_ID } from "../../../../src/config.js";
+import { prepareCouncil } from "../../../../src/council.js";
 import { Block, ChatSession, ImportedEvent, Message, Scroll } from "../../../../src/db/index.js";
 import { HarnessService } from "../core/harness.service.js";
 
 interface ChatInput {
   message: string;
   sessionId?: string;
+  mode?: string;
 }
 
 @Injectable()
@@ -16,9 +18,14 @@ export class ChatService {
   async stream(input: ChatInput, send: (obj: unknown) => void): Promise<void> {
     const userId = USER_ID;
 
+    const council = input.mode === "council";
     const session =
       (input.sessionId ? await ChatSession.findById(input.sessionId) : null) ??
-      (await ChatSession.create({ userId, kind: "chat", title: input.message.slice(0, 60) }));
+      (await ChatSession.create({
+        userId,
+        kind: council ? "council" : "chat",
+        title: council ? "Weekend council" : input.message.slice(0, 60),
+      }));
     const sessionId = String(session._id);
     send({ type: "session", id: sessionId });
 
@@ -31,7 +38,8 @@ export class ChatService {
     await Message.create({ userId, sessionId, role: "user", content: input.message });
 
     // Pre-fetch context so the first token comes fast (no mandatory tool round-trip).
-    const extraSystem = await this.buildContext(userId);
+    let extraSystem = await this.buildContext(userId);
+    if (council) extraSystem += "\n\n" + (await this.buildCouncilContext(userId));
 
     const { result, events } = await this.harness.runChat({ messages: history, extraSystem, onEvent: send });
 
@@ -84,5 +92,38 @@ export class ChatService {
     }
 
     return lines.join("\n");
+  }
+
+  /** Weekend-council mode: the week just past, in real numbers, plus how to hold
+   *  the conversation. Injected as system context (the persona itself stays in
+   *  prompts/maxwell.system.md — this only sets the ritual and the ground truth). */
+  private async buildCouncilContext(userId: string): Promise<string> {
+    const to = new Date();
+    to.setHours(0, 0, 0, 0);
+    const from = new Date(to);
+    from.setDate(from.getDate() - 7);
+    const prep = await prepareCouncil(userId, from, to);
+
+    const goalLines = Object.entries(prep.goalsByGod)
+      .flatMap(([god, gs]) => gs.map((g) => `${god}: ${g.title} (${g.wheelBaseline ?? "?"}→${g.wheelCurrent ?? "?"})`))
+      .join("; ");
+
+    return [
+      "## The Weekend Council (the `feedbacker` ritual — a CONVERSATION, not a report)",
+      "It is the weekend. You are Maxwell, presiding over the weekly council with Ohad. The other gods attend and may step forward with a [god:x] marker when their domain is in play. This is a real back-and-forth: reflect on the week just past, hear him, and design the next week TOGETHER.",
+      "",
+      "The week just past — the real numbers (never invent figures):",
+      `- Overall adherence: ${prep.week.stats.adherencePct ?? "—"}%`,
+      `- Per god: ${JSON.stringify(prep.week.stats.perGod)}`,
+      goalLines ? `- Goals in play: ${goalLines}` : "",
+      "",
+      "How to hold it:",
+      "- Open warm and brief. Wins first — what he actually pulled off — then the numbers, un-spun. Never shame.",
+      "- Then TALK WITH HIM. Short turns, one question at a time; listen and follow his lead. At least once ask some form of 'What did I get wrong about you this week?'",
+      "- Do NOT dump a full written report or a wall of bullet points. This is a dialogue.",
+      "- When you've heard enough and he's ready, design next week and offer it with the propose_week tool for his approval. You never write the schedule yourself — only he seals it.",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 }

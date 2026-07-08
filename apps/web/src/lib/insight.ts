@@ -6,6 +6,7 @@ export interface Observatory {
   bars: Array<{ godId: GodId; planned: number; done: number; pct: number | null }>;
   stars: Array<{ date: string; executionPct: number; count: number }>;
   candor: { streak: number; totalAnswers: number };
+  metrics: Array<{ godId: GodId; label: string; count: number; hours: number }>;
 }
 export interface ForgeStatus {
   bindings: { google: boolean; telegram: boolean; mcp: boolean };

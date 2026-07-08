@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { GodId } from "../../../../src/types.js";
-import { GODS_DESIGN, GOD_ORDER, roman, greeting } from "../lib/design.js";
+import { GODS_DESIGN, roman, greeting } from "../lib/design.js";
 import { GodIcon } from "../components/GodIcon.js";
 import { Statue } from "../components/Statue.js";
+import { RevealText } from "../components/RevealText.js";
 import { fetchWeek } from "../lib/loom.js";
 import type { WeekView } from "../lib/loom.js";
 import { fetchObservatory } from "../lib/insight.js";
 import type { Observatory } from "../lib/insight.js";
 
 /* ============================================================
-   OLYMPUS — Home. The cloud hero, the gold thread, the six gods,
-   the halls. Ported pixel-faithfully from Olympus.dc.html.
+   OLYMPUS — Home. The light cloud hero, the gold thread, the six
+   gods, the halls. Marble on bone; dramatic display type; gold only
+   as accent. Elevated with the masked-rise headline + motion spine.
    ============================================================ */
 
 export type OlympusView = "council" | "loom" | "observatory" | "forge" | "weekly" | "veil";
@@ -158,7 +160,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
   return (
     <div style={{ position: "relative", minHeight: "100vh", background: BONE, color: INK, overflow: "hidden" }}>
       {/* ============ CLOUD HERO ============ */}
-      <div style={{ position: "relative", height: "62vh", minHeight: 620, background: "#E9EDF0", overflow: "hidden" }}>
+      <div style={{ position: "relative", height: "68vh", minHeight: 640, background: "#E9EDF0", overflow: "hidden" }}>
         <div ref={starFarRef} style={{ position: "absolute", inset: "-6%", willChange: "transform" }}>
           {!heroFailed && (
             <img
@@ -201,10 +203,10 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
         />
         {/* fades into the page */}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(rgba(245,242,234,.3), rgba(245,242,234,0) 28%, rgba(245,242,234,0) 60%, #F5F2EA)" }} />
-        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "58%", background: "linear-gradient(90deg, rgba(245,242,234,.8), rgba(245,242,234,0))" }} />
+        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "58%", background: "linear-gradient(90deg, rgba(245,242,234,.82), rgba(245,242,234,0))" }} />
 
         {/* the breathing gold orb */}
-        <div ref={orbRef} style={{ position: "absolute", left: "14.5%", top: "21%", willChange: "transform" }}>
+        <div ref={orbRef} style={{ position: "absolute", left: "14.5%", top: "19%", willChange: "transform" }}>
           <div
             style={{
               width: 62,
@@ -217,7 +219,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
         </div>
 
         {/* zeus above the clouds */}
-        <div style={{ position: "absolute", right: "7%", bottom: "12%" }}>
+        <div style={{ position: "absolute", right: "7%", bottom: "10%" }}>
           <div ref={zeusRef} style={{ willChange: "transform" }}>
             <div style={{ animation: `mxRise 2s ${EASE} .9s both`, display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
               {!zeusFailed ? (
@@ -226,7 +228,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
                   alt="Zeus — the chair"
                   onError={() => setZeusFailed(true)}
                   style={{
-                    height: "min(46vh, 31vw)",
+                    height: "min(50vh, 33vw)",
                     mixBlendMode: "multiply",
                     filter: "brightness(1.16) contrast(1.03)",
                     WebkitMaskImage: "linear-gradient(to bottom, black 84%, transparent 100%)",
@@ -244,35 +246,37 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
           </div>
         </div>
 
-        {/* greeting */}
+        {/* greeting — dramatic masked-rise display */}
         <div
           style={{
             position: "absolute",
             left: "7%",
-            top: "44%",
+            top: "46%",
             transform: "translateY(-56%)",
             zIndex: 3,
-            maxWidth: "min(760px, 51vw)",
+            maxWidth: "min(820px, 55vw)",
             display: "flex",
             flexDirection: "column",
             gap: 22,
-            animation: `mxRise 1.6s ${EASE} .4s both`,
+            animation: `mxRise 1.4s ${EASE} .3s both`,
           }}
         >
-          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".44em", color: GOLD }}>
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 13, letterSpacing: ".48em", color: GOLD }}>
             OLYMPUS — WEEK {roman(weekNum)} · {weekday}
           </span>
-          <h1 style={{ margin: 0, fontFamily: "'Fraunces',Georgia,serif", fontWeight: 340, fontSize: 84, lineHeight: 1.04, color: INK }}>
-            {salutation}, <span style={{ fontStyle: "italic", color: GOLD }}>{userName}</span>.
+          <h1 className="mx-display" style={{ margin: 0, fontSize: "var(--step-6)", color: INK }}>
+            <RevealText text={`${salutation},`} block={false} delay={0.25} />{" "}
+            <RevealText text={`${userName}.`} block={false} delay={0.4} style={{ fontStyle: "italic", color: GOLD }} />
           </h1>
           <p
             style={{
               margin: 0,
               fontFamily: "'Cormorant Garamond',Georgia,serif",
               fontStyle: "italic",
-              fontSize: 21,
+              fontSize: "var(--step-1)",
               lineHeight: 1.5,
               color: SLATE,
+              maxWidth: 560,
               textShadow: "0 0 22px rgba(245,242,234,.95), 0 0 8px rgba(245,242,234,.9)",
             }}
           >
@@ -282,7 +286,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
       </div>
 
       {/* ============ TODAY STRIP — THE GOLD THREAD ============ */}
-      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "34px 48px 10px", animation: `mxRise 1.2s ${EASE} 1s both` }}>
+      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "44px 48px 10px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
           <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".32em", color: INK }}>TODAY — THE GOLD THREAD</span>
           <span style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 15, color: MIST }}>
@@ -291,6 +295,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
           <button
             type="button"
             onClick={() => go("loom")}
+            data-cursor="open"
             style={{
               marginLeft: "auto",
               background: "none",
@@ -362,7 +367,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
       </div>
 
       {/* ============ THE SIX GODS — ADHERENCE ============ */}
-      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "52px 48px 26px", animation: `mxRise 1.2s ${EASE} 1.3s both` }}>
+      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "52px 48px 26px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
           <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".32em", color: INK }}>THE SIX GODS — SEVEN-DAY ADHERENCE</span>
           <span style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 15, color: MIST }}>
@@ -381,7 +386,7 @@ export function Olympus({ onNavigate }: { onNavigate?: (v: OlympusView) => void 
       </div>
 
       {/* ============ THE HALLS ============ */}
-      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "40px 48px 30px", animation: `mxRise 1.2s ${EASE} 1.6s both` }}>
+      <div style={{ position: "relative", maxWidth: 1280, margin: "0 auto", padding: "40px 48px 30px" }}>
         <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 12, letterSpacing: ".32em", color: INK }}>THE HALLS</span>
         <div style={{ marginTop: 18 }}>
           {HALLS.map((h) => (
@@ -506,6 +511,7 @@ function HallRow({ hall, onOpen }: { hall: (typeof HALLS)[number]; onOpen: () =>
     <div
       role="button"
       tabIndex={0}
+      data-cursor="enter"
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}
       onMouseEnter={() => setHover(true)}
@@ -523,7 +529,17 @@ function HallRow({ hall, onOpen }: { hall: (typeof HALLS)[number]; onOpen: () =>
       }}
     >
       <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 13, letterSpacing: ".3em", color: GOLD, width: 36 }}>{hall.num}</span>
-      <span style={{ fontFamily: "'Fraunces',Georgia,serif", fontWeight: 390, fontSize: 36, color: INK, transition: "color .8s" }}>{hall.title}</span>
+      <span
+        className="mx-display"
+        style={{
+          fontSize: "var(--step-3)",
+          color: hover ? GOLD : INK,
+          transform: hover ? "translateX(10px)" : "translateX(0)",
+          transition: "transform .6s cubic-bezier(0.16,1,0.3,1), color .6s",
+        }}
+      >
+        {hall.title}
+      </span>
       <span style={{ marginLeft: "auto", fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 16, color: MIST }}>{hall.tag}</span>
       <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 14, color: GOLD }}>—</span>
     </div>
@@ -536,6 +552,7 @@ function VeilLink({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
+      data-cursor="veil"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{

@@ -5,21 +5,33 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { streamChat, type ChatFrame } from "../lib/api.js";
-import { GODS_DESIGN, tint } from "../lib/design.js";
+import { API_URL, streamChat, type ChatFrame } from "../lib/api.js";
+import { GODS_DESIGN, roman, tint } from "../lib/design.js";
 import { GodIcon } from "../components/GodIcon.js";
 import type { GodId } from "../../../../src/types.js";
 
 /**
- * The Council — one continuous divine voice. Pixel-faithful port of
- * screens/The Council.dc.html. The scripted opening scene is baked in exactly
- * (copy, colors, animation delays); anything the user *offers* is streamed live
- * through `streamChat`, rendered with the same vocabulary: 3-word `mxToken`
- * groups, the "consulting the outer world…" shimmer, hue-tinted god
- * step-forward passages, and the proposal card.
+ * The Council — one continuous divine voice. The conversation starts EMPTY:
+ * a mythic empty state waits until the user speaks, and everything after is
+ * streamed live through `streamChat` — nothing is scripted or baked. Live turns
+ * are rendered with the design vocabulary: 3-word `mxToken` groups, the
+ * "consulting the outer world…" shimmer, hue-tinted god step-forward passages,
+ * and the proposal card.
  */
 
 const CB = "cubic-bezier(0.22,1,0.36,1)";
+
+// The council's live "presiding" label — real week number + weekday, no fixtures.
+function presidingLabel(): string {
+  const now = new Date();
+  const t = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  const wd = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][now.getDay()];
+  return `ZEUS PRESIDES — WEEK ${roman(week)} · ${wd}`;
+}
 
 // Live GIF filenames per god (404 gracefully → marble icon fallback).
 const LIVE_GIF: Record<GodId, string> = {
@@ -167,29 +179,6 @@ function TokenGroups({
   );
 }
 
-/** A single explicit-delay span (for the baked opening scene). */
-function Tok({
-  text,
-  delay,
-  color,
-}: {
-  text: string;
-  delay: number;
-  color?: string;
-}) {
-  return (
-    <span
-      style={{
-        opacity: 0,
-        animation: `mxToken .8s ${CB} ${delay}s both`,
-        color,
-      }}
-    >
-      {text}
-    </span>
-  );
-}
-
 /** A completed "CONSULTED —" diamond marker line. */
 function ConsultedLine({ text, delay = 0 }: { text: string; delay?: number }) {
   return (
@@ -265,33 +254,23 @@ function MaxwellHead() {
 
 // ── Proposal card ───────────────────────────────────────────────────────────
 
-interface ProposalRow {
-  sign: string;
-  color: string;
-  bg: string;
-  border: string;
-  label: string;
-  time: string;
+interface ProposalDetail {
+  ok: boolean;
+  status?: string;
+  diff?: {
+    adds: Array<{ godId: GodId; title: string; start: string; end: string }>;
+    moves: Array<{ title: string; godId: GodId | null; toStart: string; toEnd: string }>;
+    deletes: Array<{ title: string; godId: GodId | null }>;
+  };
 }
 
-const DEFAULT_PROPOSAL_ROWS: ProposalRow[] = [
-  {
-    sign: "+",
-    color: "#4F8C82",
-    bg: "rgba(79,140,130,.07)",
-    border: "rgba(79,140,130,.35)",
-    label: "ADD — RUN",
-    time: "Tue 07:00 — 07:45",
-  },
-  {
-    sign: "→",
-    color: "#7C8CA6",
-    bg: "rgba(124,140,166,.07)",
-    border: "rgba(124,140,166,.35)",
-    label: "MOVE — DEEP WORK",
-    time: "Thu 09:00 — 12:00",
-  },
-];
+function fmtWhen(iso: string): string {
+  const d = new Date(iso);
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${wd} ${hh}:${mm}`;
+}
 
 function GhostButton({
   label,
@@ -338,17 +317,46 @@ function GhostButton({
   );
 }
 
-function ProposalCard({
-  numeral = "№ 12",
-  rows = DEFAULT_PROPOSAL_ROWS,
-  delay = 0,
-}: {
-  numeral?: string;
-  rows?: ProposalRow[];
-  delay?: number;
-}) {
-  const [state, setState] = useState<"open" | "sealed" | "editing">("open");
-  const border = state === "sealed" ? "rgba(198,161,91,.6)" : "#D8D0C0";
+function ProposalCard({ pid }: { pid: string }) {
+  const [detail, setDetail] = useState<ProposalDetail | null>(null);
+  const [state, setState] = useState<"open" | "sealing" | "sealed">("open");
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_URL}/proposals/${pid}`)
+      .then((r) => r.json())
+      .then((d: ProposalDetail) => {
+        if (alive) setDetail(d);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [pid]);
+
+  const approve = async () => {
+    setState("sealing");
+    try {
+      const r = await fetch(`${API_URL}/proposals/${pid}/approve`, { method: "POST" });
+      const j = (await r.json()) as { ok?: boolean };
+      setState(j.ok === false ? "open" : "sealed");
+    } catch {
+      setState("open");
+    }
+  };
+
+  const rows: Array<{ sign: string; rgb: string; label: string; time: string }> = [];
+  if (detail?.diff) {
+    for (const a of detail.diff.adds)
+      rows.push({ sign: "+", rgb: GODS_DESIGN[a.godId]?.rgb ?? "198,161,91", label: `ADD — ${a.title.toUpperCase()}`, time: fmtWhen(a.start) });
+    for (const m of detail.diff.moves)
+      rows.push({ sign: "→", rgb: "124,140,166", label: `MOVE — ${m.title.toUpperCase()}`, time: fmtWhen(m.toStart) });
+    for (const d of detail.diff.deletes)
+      rows.push({ sign: "−", rgb: "138,133,122", label: `REMOVE — ${d.title.toUpperCase()}`, time: "—" });
+  }
+  const already = detail?.status === "applied";
+  const sealed = state === "sealed" || already;
+  const border = sealed ? "rgba(198,161,91,.6)" : "#D8D0C0";
 
   return (
     <div
@@ -363,32 +371,23 @@ function ProposalCard({
         flexDirection: "column",
         gap: 12,
         transition: "border-color .8s",
-        animation: `mxRise 1s ${CB} ${delay}s both`,
+        animation: `mxRise 1s ${CB} both`,
       }}
     >
       <div style={{ display: "flex", alignItems: "baseline" }}>
-        <span
-          style={{
-            fontFamily: "'Cormorant SC',serif",
-            fontSize: 10,
-            letterSpacing: ".3em",
-            color: "#8A857A",
-          }}
-        >
+        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 10, letterSpacing: ".3em", color: "#8A857A" }}>
           PROPOSAL — THE COUNCIL
         </span>
-        <span
-          style={{
-            marginLeft: "auto",
-            fontFamily: "'Fraunces',Georgia,serif",
-            fontStyle: "italic",
-            fontSize: 14,
-            color: "#C6A15B",
-          }}
-        >
-          {numeral}
+        <span style={{ marginLeft: "auto", fontFamily: "'Fraunces',Georgia,serif", fontStyle: "italic", fontSize: 14, color: "#C6A15B" }}>
+          {rows.length} change{rows.length === 1 ? "" : "s"}
         </span>
       </div>
+
+      {!detail && (
+        <span style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 15, color: "#8A857A" }}>
+          drawing up the change…
+        </span>
+      )}
 
       {rows.map((r, i) => (
         <div
@@ -397,107 +396,39 @@ function ProposalCard({
             display: "flex",
             alignItems: "baseline",
             gap: 12,
-            background: r.bg,
-            border: `1px solid ${r.border}`,
+            background: `rgba(${r.rgb},.07)`,
+            border: `1px solid rgba(${r.rgb},.35)`,
             borderRadius: 2,
             padding: "11px 14px",
           }}
         >
-          <span
-            style={{
-              fontFamily: "'Fraunces',Georgia,serif",
-              fontSize: 16,
-              color: r.color,
-            }}
-          >
-            {r.sign}
-          </span>
-          <span
-            style={{
-              fontFamily: "'Cormorant SC',serif",
-              fontSize: 11,
-              letterSpacing: ".22em",
-            }}
-          >
-            {r.label}
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: 11, color: "#8A857A" }}>
-            {r.time}
-          </span>
+          <span style={{ fontFamily: "'Fraunces',Georgia,serif", fontSize: 16, color: `rgb(${r.rgb})` }}>{r.sign}</span>
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".22em" }}>{r.label}</span>
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#8A857A" }}>{r.time}</span>
         </div>
       ))}
 
-      {state === "open" && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            marginTop: 4,
-          }}
-        >
+      {!sealed ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
           <GhostButton
-            label="APPROVE —"
-            onClick={() => setState("sealed")}
+            label={state === "sealing" ? "WEAVING…" : "APPROVE —"}
+            onClick={() => {
+              if (detail && state !== "sealing") void approve();
+            }}
             color="#C6A15B"
             borderColor="rgba(198,161,91,.5)"
             hoverColor="#C6A15B"
             hoverBorder="#C6A15B"
             hoverBg="rgba(198,161,91,.1)"
           />
-          <GhostButton
-            label="EDIT"
-            onClick={() => setState("editing")}
-            color="#8A857A"
-            borderColor="#D8D0C0"
-            hoverColor="#4A4740"
-            hoverBorder="#8A857A"
-            hoverBg="transparent"
-          />
         </div>
-      )}
-
-      {state === "sealed" && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginTop: 4,
-          }}
-        >
-          <div
-            style={{
-              width: 6,
-              height: 6,
-              background: "#C6A15B",
-              transform: "rotate(45deg)",
-            }}
-          />
-          <span
-            style={{
-              fontFamily: "'Cormorant SC',serif",
-              fontSize: 11,
-              letterSpacing: ".28em",
-              color: "#C6A15B",
-            }}
-          >
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+          <div style={{ width: 6, height: 6, background: "#C6A15B", transform: "rotate(45deg)" }} />
+          <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: ".28em", color: "#C6A15B" }}>
             SEALED — WOVEN INTO THE LOOM
           </span>
         </div>
-      )}
-
-      {state === "editing" && (
-        <span
-          style={{
-            fontFamily: "'Cormorant Garamond',Georgia,serif",
-            fontStyle: "italic",
-            fontSize: 15,
-            color: "#8A857A",
-          }}
-        >
-          Amendments open in the Loom — drag the blocks where you will.
-        </span>
       )}
     </div>
   );
@@ -557,9 +488,7 @@ function LiveEntryView({ entry }: { entry: LiveEntry }) {
     return <ConsultedLine text={entry.text} />;
   }
   if (entry.kind === "proposal") {
-    return (
-      <ProposalCard numeral="№ —" />
-    );
+    return <ProposalCard pid={entry.pid} />;
   }
   // voice
   if (entry.god === "zeus") {
@@ -582,6 +511,61 @@ function LiveEntryView({ entry }: { entry: LiveEntry }) {
   return (
     <div style={{ animation: `mxRise 1s ${CB} both` }}>
       <StepForward god={entry.god} text={entry.text} />
+    </div>
+  );
+}
+
+/** Mythic empty state — shown until the user first addresses the council. */
+function EmptyState() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        gap: 20,
+        padding: "40px 24px",
+        animation: `mxRise 1.1s ${CB} .2s both`,
+      }}
+    >
+      <span
+        style={{
+          fontFamily: "'Cormorant SC',serif",
+          fontSize: 11,
+          letterSpacing: ".34em",
+          color: "#C6A15B",
+        }}
+      >
+        THE COUNCIL ATTENDS
+      </span>
+      <h2
+        style={{
+          margin: 0,
+          fontFamily: "'Cormorant Garamond',Georgia,serif",
+          fontStyle: "italic",
+          fontWeight: 400,
+          fontSize: 40,
+          lineHeight: 1.15,
+          color: "#14131A",
+        }}
+      >
+        The council is listening.
+      </h2>
+      <p
+        style={{
+          margin: 0,
+          maxWidth: "44ch",
+          fontFamily: "'Cormorant Garamond',Georgia,serif",
+          fontStyle: "italic",
+          fontSize: 19,
+          lineHeight: 1.6,
+          color: "#8A857A",
+        }}
+      >
+        Address them — Maxwell answers, and the gods step forward when their
+        domain is called.
+      </p>
     </div>
   );
 }
@@ -767,13 +751,6 @@ export function Council({
         overflow: "hidden",
       }}
     >
-      {/* keyframes the prototype defined locally (not in the global catalog) */}
-      <style>{`
-        @keyframes mxFadeOut { to { opacity: 0; } }
-        @keyframes mxSlideIn { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes mxRingTeal { 0% { box-shadow: 0 0 0 2px rgba(79,140,130,.55); } 50% { box-shadow: 0 0 0 9px rgba(79,140,130,.1); } 100% { box-shadow: 0 0 0 2px rgba(79,140,130,.55); } }
-      `}</style>
-
       {/* the five gods, faint in the far background */}
       {showFrieze && (
         <div
@@ -787,7 +764,7 @@ export function Council({
             alignItems: "flex-start",
             padding: "0 7%",
             pointerEvents: "none",
-            opacity: 0.35,
+            opacity: 0.12,
           }}
         >
           <FriezeImg god="athena" height={216} marginTop={0} brightness={1.16} />
@@ -865,7 +842,7 @@ export function Council({
               color: "#4A4740",
             }}
           >
-            ZEUS PRESIDES — WEEK XXVIII · THU
+            {presidingLabel()}
           </span>
         </div>
       </div>
@@ -890,219 +867,10 @@ export function Council({
             gap: 26,
           }}
         >
-          {/* ── baked opening scene ─────────────────────────────── */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 18,
-              animation: `mxRise .8s ${CB} .2s both`,
-            }}
-          >
-            <div style={{ flex: 1, height: 1, background: "#D8D0C0" }} />
-            <span
-              style={{
-                fontFamily: "'Cormorant SC',serif",
-                fontSize: 10,
-                letterSpacing: ".32em",
-                color: "#8A857A",
-              }}
-            >
-              THURSDAY — THE EIGHTH HOUR
-            </span>
-            <div style={{ flex: 1, height: 1, background: "#D8D0C0" }} />
-          </div>
+          {/* the council waits, empty, until the user speaks */}
+          {entries.length === 0 && !streaming && <EmptyState />}
 
-          <UserBubble
-            text="The launch slipped to Thursday. I'm behind, and I haven't run all week."
-            delay={0.5}
-          />
-
-          <ConsultedLine
-            text="CONSULTED THE OUTER WORLD — CALENDAR · MAIL · 14 THREADS"
-            delay={1}
-          />
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              animation: `mxRise .7s ${CB} 1.2s both, mxFadeOut .6s 2.6s forwards`,
-            }}
-          >
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#C6A15B",
-                animation: "mxOrb 1.6s ease-in-out infinite",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "'Cormorant SC',serif",
-                fontSize: 11,
-                letterSpacing: ".3em",
-                color: "#C6A15B",
-                animation: "mxShimmer 2.2s ease-in-out infinite",
-              }}
-            >
-              CONSULTING THE OUTER WORLD…
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              animation: `mxRise .9s ${CB} 1.8s both`,
-            }}
-          >
-            <MaxwellHead />
-            <p
-              style={{
-                margin: "0 0 0 52px",
-                fontSize: 16,
-                lineHeight: 1.75,
-                color: "#14131A",
-                maxWidth: "56ch",
-              }}
-            >
-              <Tok text="Then we move the wall, " delay={2.2} />
-              <Tok text="not the runner. " delay={2.36} />
-              <Tok text="Thursday is workable — " delay={2.52} />
-              <Tok text="two deep-work mornings " delay={2.68} />
-              <Tok text="stand open before the gate. " delay={2.84} />
-              <Tok text="I will hold them. " delay={3} />
-              <Tok text="But hear me: " delay={3.16} />
-              <Tok text="the body pays " delay={3.32} />
-              <Tok text="your interest first, " delay={3.48} />
-              <Tok text="and it has gone unpaid " delay={3.64} />
-              <Tok text="four days now. " delay={3.8} />
-              <Tok text="Asclepius —" delay={3.96} />
-            </p>
-          </div>
-
-          {/* asclepius step-forward (baked) */}
-          <div
-            style={{
-              marginLeft: 52,
-              background: "rgba(79,140,130,.07)",
-              borderTop: "1px solid rgba(79,140,130,.4)",
-              borderBottom: "1px solid rgba(79,140,130,.4)",
-              padding: "18px 20px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              animation: `mxRise 1s ${CB} 4.5s both`,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div
-                style={{
-                  borderRadius: "50%",
-                  animation: "mxRingTeal 1.8s ease-in-out 4.7s 2",
-                }}
-              >
-                <Avatar god="asclepius" size={34} />
-              </div>
-              <span
-                style={{
-                  fontFamily: "'Cormorant SC',serif",
-                  fontSize: 10,
-                  letterSpacing: ".3em",
-                  color: "#4F8C82",
-                  background: "rgba(79,140,130,.1)",
-                  border: "1px solid rgba(79,140,130,.35)",
-                  padding: "5px 11px",
-                  animation: `mxSlideIn .9s ${CB} 4.8s both`,
-                }}
-              >
-                ASCLEPIUS — STEPS FORWARD
-              </span>
-            </div>
-            <p
-              style={{
-                margin: 0,
-                fontFamily: "'Cormorant Garamond',Georgia,serif",
-                fontStyle: "italic",
-                fontSize: 19,
-                lineHeight: 1.6,
-                color: "#14131A",
-              }}
-            >
-              <Tok text="Three dawns this week " delay={5.1} />
-              <Tok text="belong to the road. " delay={5.32} />
-              <Tok text="I have held Tuesday, " delay={5.54} />
-              <Tok text="seven o'clock — " delay={5.76} />
-              <Tok text="say yes, and it is stone." delay={5.98} />
-            </p>
-          </div>
-
-          <ProposalCard delay={6.6} />
-
-          <UserBubble
-            text="Approve the run. Keep Friday night free for Maria."
-            delay={7.2}
-          />
-
-          <ConsultedLine
-            text="CONSULTED — TELEGRAM · ONE PROMISE FOUND"
-            delay={7.7}
-          />
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-              animation: `mxRise .9s ${CB} 8s both`,
-            }}
-          >
-            <MaxwellHead />
-            <p
-              style={{
-                margin: "0 0 0 52px",
-                fontSize: 16,
-                lineHeight: 1.75,
-                color: "#14131A",
-                maxWidth: "56ch",
-              }}
-            >
-              <Tok text="Done. " delay={8.3} />
-              <Tok text="The run is stone; " delay={8.48} />
-              <Tok text="Friday dusk stays yours — " delay={8.66} />
-              <Tok text="Hestia " delay={8.84} color="#E2823C" />
-              <Tok text="will guard the table." delay={9.02} />
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 18,
-              animation: `mxRise .9s ${CB} 9.8s both`,
-            }}
-          >
-            <div style={{ flex: 1, height: 1, background: "#D8D0C0" }} />
-            <span
-              style={{
-                fontFamily: "'Cormorant SC',serif",
-                fontSize: 9,
-                letterSpacing: ".3em",
-                color: "#8A857A",
-              }}
-            >
-              SEALED — THU 21:04 · THE LOOM UPDATED
-            </span>
-            <div style={{ flex: 1, height: 1, background: "#D8D0C0" }} />
-          </div>
-
-          {/* ── live turns ──────────────────────────────────────── */}
+          {/* ── live turns (streamed, never scripted) ───────────── */}
           {entries.map((e) => (
             <LiveEntryView key={e.id} entry={e} />
           ))}

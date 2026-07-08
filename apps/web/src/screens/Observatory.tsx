@@ -405,17 +405,93 @@ export function Observatory({ onReturn }: { onReturn?: () => void }) {
         </div>
       </div>
 
+      {/* this week, in plain terms — concrete tallies from what actually held */}
+      <div
+        style={{
+          position: "relative",
+          maxWidth: 1240,
+          margin: "0 auto",
+          padding: "18px 48px 8px",
+          animation: `mxRise 1.1s ${EASE} .3s both`,
+        }}
+      >
+        <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 11, letterSpacing: "0.34em", color: tint("237,230,214", 0.55) }}>
+          THIS WEEK, YOU ACTUALLY —
+        </span>
+        <div
+          style={{
+            marginTop: 16,
+            display: "grid",
+            gridTemplateColumns: `repeat(${data.metrics.length}, 1fr)`,
+            gap: 16,
+          }}
+        >
+          {data.metrics.map((m, i) => {
+            const g = GODS_DESIGN[m.godId];
+            const primary =
+              m.godId === "athena" || m.godId === "apollo"
+                ? `${m.hours}h`
+                : m.godId === "hermes"
+                  ? `${m.count}`
+                  : `${m.count}×`;
+            const sub =
+              m.godId === "athena" || m.godId === "apollo"
+                ? `${m.count} session${m.count === 1 ? "" : "s"}`
+                : m.godId === "hermes"
+                  ? "loops closed"
+                  : m.hours > 0
+                    ? `${m.hours}h together`
+                    : "time held";
+            return (
+              <div
+                key={m.godId}
+                style={{
+                  background: PANEL,
+                  border: `1px solid ${tint("237,230,214", 0.1)}`,
+                  borderTop: `2px solid ${g.hue}`,
+                  borderRadius: 2,
+                  padding: "18px 20px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  animation: `mxRise 0.9s ${EASE} ${0.4 + i * 0.08}s both`,
+                }}
+              >
+                <span style={{ fontFamily: "'Cormorant SC',serif", fontSize: 9, letterSpacing: "0.22em", color: g.hue }}>
+                  {m.label.toUpperCase()}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "'Fraunces',Georgia,serif",
+                    fontStyle: "italic",
+                    fontWeight: 330,
+                    fontSize: 44,
+                    lineHeight: 1,
+                    color: m.count > 0 ? INK : tint("237,230,214", 0.4),
+                  }}
+                >
+                  {primary}
+                </span>
+                <span style={{ fontFamily: "'Cormorant Garamond',Georgia,serif", fontStyle: "italic", fontSize: 13, color: tint("237,230,214", 0.5) }}>
+                  {sub}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* week of stars — the constellation */}
       <div
         style={{
           position: "relative",
           maxWidth: 1160,
           margin: "0 auto",
-          padding: "30px 48px 18px",
-          animation: `mxRise 1.1s ${EASE} .4s both`,
+          padding: "24px 48px 18px",
+          animation: `mxRise 1.1s ${EASE} .5s both`,
         }}
       >
-        <Constellation stars={data.stars} delayBase={0.4} />
+        <Constellation stars={data.stars} delayBase={0.5} />
       </div>
 
       {/* radar + right column */}

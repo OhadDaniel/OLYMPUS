@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { InlineKeyboard } from "grammy";
-import { USER_ID } from "../../../../src/config.js";
+import { config, USER_ID } from "../../../../src/config.js";
 import { claimJob, releaseJob } from "../../../../src/jobs.js";
 import { readWeek } from "../../../../src/scheduling/week.js";
 import { runConsolidation } from "../../../../src/workflows/consolidation.js";
@@ -44,6 +44,25 @@ export class RhythmService {
   @Cron("0 2 * * *")
   async consolidationCron(): Promise<void> {
     if (await claimJob(USER_ID, todayKey("consolidate"))) await runConsolidation(USER_ID);
+  }
+
+  // Saturday 10:00 — invite him to the weekend council conversation (weekend-only ritual).
+  @Cron("0 10 * * 6")
+  async weeklyCouncilNudgeCron(): Promise<void> {
+    const key = todayKey("council-nudge");
+    if (!(await claimJob(USER_ID, key))) return;
+    const { sent } = await this.sendWeeklyCouncilNudge();
+    if (!sent) await releaseJob(key);
+  }
+
+  async sendWeeklyCouncilNudge(): Promise<{ sent: boolean; text: string }> {
+    const text = [
+      "🏛️ The council convenes this weekend.",
+      "Come sit with them — weigh the week just past, and design the next one together. Not a report. A conversation.",
+      `${config.appUrl}`,
+    ].join("\n");
+    const sent = await this.tg.sendMessage(text);
+    return { sent, text };
   }
 
   consolidate(): Promise<{ learned: number }> {

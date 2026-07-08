@@ -16,7 +16,17 @@ export interface Observatory {
   bars: Array<{ godId: GodId; planned: number; done: number; pct: number | null }>;
   stars: Array<{ date: string; executionPct: number; count: number }>;
   candor: { streak: number; totalAnswers: number };
+  /** Concrete "this week you actually did X" tallies from done blocks. */
+  metrics: Array<{ godId: GodId; label: string; count: number; hours: number }>;
 }
+
+const METRIC_DEFS: Array<{ godId: GodId; label: string }> = [
+  { godId: "athena", label: "Deep focus" },
+  { godId: "asclepius", label: "Trained" },
+  { godId: "hestia", label: "Saw people" },
+  { godId: "hermes", label: "Tasks cleared" },
+  { godId: "apollo", label: "Craft & growth" },
+];
 
 const PLANNED = new Set(["scheduled", "done", "moved", "skipped"]);
 
@@ -73,5 +83,15 @@ export async function buildObservatory(userId: string): Promise<Observatory> {
     cur.setDate(cur.getDate() - 1);
   }
 
-  return { radar, bars, stars, candor: { streak, totalAnswers } };
+  // Concrete tallies from the last 7 days of DONE blocks.
+  const weekAgo = startOfDay(now);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const doneThisWeek = blocks.filter((b) => b.status === "done" && new Date(b.start) >= weekAgo);
+  const metrics = METRIC_DEFS.map((d) => {
+    const bs = doneThisWeek.filter((b) => b.godId === d.godId);
+    const minutes = bs.reduce((s, b) => s + (new Date(b.end).getTime() - new Date(b.start).getTime()) / 60000, 0);
+    return { godId: d.godId, label: d.label, count: bs.length, hours: Math.round((minutes / 60) * 10) / 10 };
+  });
+
+  return { radar, bars, stars, candor: { streak, totalAnswers }, metrics };
 }
