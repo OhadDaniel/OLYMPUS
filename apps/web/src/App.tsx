@@ -34,18 +34,26 @@ export function App() {
   const [veilOpen, setVeilOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // First-ever open (no Scroll) → the First Meeting.
+  // First-ever open (no Scroll) → the First Meeting. Never block the UI on a
+  // slow/asleep backend: reveal within 2.5s no matter what, and cap the probe.
   useEffect(() => {
     let alive = true;
-    fetch(`${API_URL}/onboarding/status`)
+    const reveal = setTimeout(() => alive && setBooted(true), 2500);
+    fetch(`${API_URL}/onboarding/status`, { signal: AbortSignal.timeout(8000) })
       .then((r) => r.json())
       .then((s: { needed?: boolean }) => {
         if (alive && s.needed) setView("onboarding");
       })
       .catch(() => {})
-      .finally(() => alive && setBooted(true));
+      .finally(() => {
+        if (alive) {
+          clearTimeout(reveal);
+          setBooted(true);
+        }
+      });
     return () => {
       alive = false;
+      clearTimeout(reveal);
     };
   }, []);
 
@@ -69,7 +77,12 @@ export function App() {
     setMenuOpen(false);
   };
 
-  if (!booted) return <div className="min-h-screen bg-void" />;
+  if (!booted)
+    return (
+      <div className="min-h-screen bg-void" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#C6A15B", animation: "mxOrb 1.6s ease-in-out infinite" }} />
+      </div>
+    );
 
   const screen: ReactNode =
     view === "onboarding" ? (
