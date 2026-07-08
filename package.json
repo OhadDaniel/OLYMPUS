@@ -12,6 +12,7 @@
   "scripts": {
     "dev:api": "tsx watch apps/api/src/main.ts",
     "dev:web": "npm run dev --workspace apps/web",
+    "start": "tsx apps/api/src/main.ts",
     "repl": "tsx scripts/repl.ts",
     "mcp:world": "tsx mcp/world-server.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
@@ -28,11 +29,11 @@
     "mongoose": "^8.9.5",
     "openai": "^4.80.0",
     "reflect-metadata": "^0.2.2",
+    "tsx": "^4.19.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
   }

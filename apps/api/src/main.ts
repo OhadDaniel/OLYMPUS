@@ -9,10 +9,15 @@ async function bootstrap(): Promise<void> {
   if (config.mongodbUri) await connectDb();
 
   const app = await NestFactory.create(AppModule, { logger: ["error", "warn", "log"] });
-  app.enableCors({ origin: config.appUrl, credentials: true });
+  // Allow the deployed front end (APP_URL) plus local dev origins.
+  app.enableCors({
+    origin: [config.appUrl, "http://localhost:5273", "http://localhost:5173"],
+    credentials: true,
+  });
 
-  const port = Number(new URL(config.apiUrl).port || 3001);
-  await app.listen(port);
+  // Hosts (Render/Railway/Fly) inject $PORT; fall back to the API_URL port locally.
+  const port = Number(process.env.PORT) || Number(new URL(config.apiUrl).port || 3001);
+  await app.listen(port, "0.0.0.0");
   // eslint-disable-next-line no-console
   console.log(`maxwell-api listening on ${config.apiUrl} (mongo=${config.mongodbUri ? "on" : "off"})`);
 
